@@ -1,0 +1,83 @@
+================================================================================
+ 암호화폐 심층강화학습(DRL) 거래 시스템 기술 제안서 (Agent Proposal)
+================================================================================
+
+1. 프로젝트 개요 및 기획 평가
+--------------------------------------------------------------------------------
+본 프로젝트는 바이낸스 선물 비트코인 데이터를 기반으로 심층강화학습(DRL) 모델을 실험·개발하고,
+Node.js 브라우저 GUI를 통해 데이터 관리, 차트 시각화, 파이썬 학습 제어 및 JS 기반 초고속 백테스팅을
+수행하는 샌드박스 시스템 구축을 목표로 합니다.
+
+my_goal.txt에 제시된 기획은 학습(PyTorch/Gymnasium)과 시각화/백테스팅(Node.js/Lightweight Charts)의 
+역할 분담이 매우 합리적이며, 실험의 유연성과 확정성을 극대화한 구조입니다.
+
+
+2. 주요 기술 제안 및 상호운용성 규격
+--------------------------------------------------------------------------------
+2.1. Python ➡️ JS 모델 이관 및 백테스팅 (ONNX 활용)
+  - 학습 완료된 PyTorch 모델을 ONNX(Open Neural Network Exchange, .onnx) 포맷으로 Export.
+  - Node.js 환경에서는 `onnxruntime-node` (또는 브라우저 `onnxruntime-web`)를 사용하여 추론 실행.
+  - 장점: 파이썬 인터프리터 호출 없이 JS 백테스터에서 초당 수만 개의 캔들 추론이 가능하여 
+    백테스팅 속도를 극대화하고, 다양한 파이썬 신경망 구조를 동일한 백테스트 엔진에서 테스트 가능.
+
+2.2. Gymnasium 커스텀 Market 환경 설계 (Gymnasium Custom Env)
+  - State Space (관측값):
+    * OHLCV 가격 데이터 및 기술적 지표 (RSI, MACD, Bollinger Bands, ATR 등)
+    * 포지션 상태 (현재 보유 포지션 Long/Short/None, 진입 평단가, 미체결 수량, 레버리지, 계좌 잔고)
+  - Action Space (행동):
+    * Discrete (DQN 계열): 0: Hold/Pass, 1: Buy/Long 진입, 2: Sell/Short 진입, 3: Position Close
+    * Continuous (Policy Gradient 계열): 포지션 크기 및 레버리지 비율 (-1.0 ~ +1.0)
+  - Reward Strategy (보상 체계 객체화):
+    * 단순 손익(PnL) 외에 샤프 지수(Sharpe Ratio), MDD(최대 낙폭) 감점, 과도한 매매 수수료 감점 반영.
+    * `RewardStrategy` 인터페이스/클래스로 모듈화하여 알고리즘별 보상 체계 교체 실험 가능하도록 설계.
+  - 실질적 거래 비용 반영:
+    * 바이낸스 선물 수수료 (Maker/Taker), 슬리피지(Slippage), 펀딩비(Funding Fee) 환경 반영.
+
+2.3. Node.js ↔ Python 통신 및 실시간 지표 스트리밍
+  - 파이썬 학습 실행 시 Node.js `child_process.spawn`으로 호출.
+  - 학습 과정(에포크, 손실, 에피소드 보상, 리턴 곡선 등)을 stdout JSON 스트림 또는 WebSocket 통신으로 
+    Node.js 서버에 전송하여 웹 GUI 차트/표에 실시간 시각화.
+
+
+3. 모듈화 및 디렉터리 구조 설계 (AGENTS.md 규칙 반영)
+--------------------------------------------------------------------------------
+cabt_drl/
+├── AGENTS.md                   # AI 에이전트 행동 및 모듈화 규칙
+├── my_goal.txt                 # 사용자 작성 프로젝트 목표
+├── agent_proposal.txt          # 본 기술 제안서
+├── server.js                   # Node.js 웹 GUI & API 메인 서버
+├── package.json
+├── routes/                     # Node.js 라우터 (데이터 관리, 학습 제어, 백테스트 API)
+├── services/                   # Node.js 백테스팅 엔진 & ONNX 추론 실행기
+├── public/                     # 브라우저 프론트엔드 (TradingView Lightweight Charts 통합)
+└── python/                     # 파이썬 DRL 가상환경 및 모듈
+    ├── .venv/                  # Python 가상환경
+    ├── main_train.py           # 학습 실행 엔트리포인트
+    ├── export_onnx.py          # PyTorch -> ONNX 변환 스크립트
+    ├── data/                   # 데이터 수집기 & 전처리기 (Binance Data Fetcher)
+    ├── env/                    # Gymnasium 커스텀 Market 환경 (TradingEnv, Rewards)
+    ├── models/                 # PyTorch 신경망 구조 (DQN, DuelingDQN, PolicyNet 등)
+    ├── agents/                 # 강화학습 에이전트 (DQN Agent, PPO Agent 등)
+    └── utils/                  # 공통 유틸리티 (지표 계산, 시드 고정 등)
+
+
+4. 단계별 개발 로드맵 (Development Roadmap)
+--------------------------------------------------------------------------------
+[Phase 1] Python DRL 핵심 골격 구축
+  - 바이낸스 과거 선물 OHLCV 데이터 수집 모듈 구현 (`python/data/`)
+  - Gymnasium 커스텀 `CryptoTradingEnv` 및 보상 클래스 작성 (`python/env/`)
+  - 기본 PyTorch DQN 에이전트 & 학습 루프 구현 및 검증 (`python/agents/`)
+
+[Phase 2] Node.js GUI & 차트 시각화 엔진 구축
+  - Node.js Express 웹 서버 및 바이낸스 데이터 조회 API 작성
+  - 브라우저 전용 TradingView Lightweight Charts 캔들스틱 시각화 연동
+  - 파이썬 학습 실행 제어 및 실시간 로그/차트 수신 파이프라인 연동
+
+[Phase 3] PyTorch ONNX 변환 및 JS 백테스팅 시스템 완성
+  - 학습 완료 모델 ONNX 파이프라인 연동 (`export_onnx.py`)
+  - JS `onnxruntime-node` 기반 초고속 백테스터 및 수익률/MDD/매매표 시각화 구축
+
+[Phase 4] 고급 알고리즘 확장 및 매매 전략 실험
+  - Double DQN, Dueling DQN, Rainbow DQN, PPO 등 알고리즘 확충
+  - 멀티 타임프레임 지표 및 고도화된 보상 함수(Reward Strategy) 다각도 실험
+================================================================================
