@@ -9,11 +9,16 @@ class DataController {
    * GET /api/data/fetch
    * 바이낸스 데이터 수집 및 자동 로컬 저장
    */
+  // 메서드 내부에서 비동기 함수를 사용하고 있으므로 async...
   async fetchAndSaveData(req, res) {
     try {
+      // 1. html get 요청에서 ?로 매개변수 전달...
       const { symbol = 'BTCUSDT', interval = '1h', startTime, endTime, limit, save = 'true' } = req.query;
 
+      // 2. 바이낸스에서 요청 데이터 받아오고...
+      // fetchKlines가 비동기 함수인데, 그냥 넘어가면 안되니 await...
       const dataset = await binanceService.fetchKlines({
+        // 매개변수 이름과 전달하는 변수 이름이 같으면 한 번만...
         symbol,
         interval,
         startTime,
@@ -21,7 +26,9 @@ class DataController {
         limit: limit ? parseInt(limit, 10) : undefined,
       });
 
+      // 3. 저장 옵션이면 데이터 저장하고 반환...
       if (save === 'true' && dataset.totalCount > 0) {
+        // saveData가 writeFile를 사용...이게 비동기 함수라서 await...
         const saveResult = await dataStorageService.saveData(symbol, interval, dataset);
         return res.json({
           success: true,
@@ -32,6 +39,7 @@ class DataController {
         });
       }
 
+      // 여기 왔다는 건 저장은 안하고 결과 반환한다는 얘기...
       return res.json({
         success: true,
         message: `${dataset.totalCount}개의 캔들 데이터 수집 완료 (저장 안함)`,
@@ -116,4 +124,7 @@ class DataController {
   }
 }
 
+// 이게 싱글톤 패턴...
+// 여기서 new로 생성해서 인스턴스를 내보내므로,
+// 다른 모든 곳에서는 여기서 생성한 하나의 객체만을 사용하게 됨.
 module.exports = new DataController();
