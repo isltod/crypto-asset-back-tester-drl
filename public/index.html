@@ -1,66 +1,89 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CABT DRL - Crypto Asset BackTester</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      background-color: #12161f;
-      color: #e0e6ed;
-      margin: 0;
-      padding: 20px;
-    }
-    .container {
-      max-width: 900px;
-      margin: 0 auto;
-      background-color: #1a2130;
-      padding: 25px;
-      border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-    }
-    h1 {
-      color: #4f46e5;
-      font-size: 1.8rem;
-      margin-top: 0;
-    }
-    .status-badge {
-      display: inline-block;
-      padding: 4px 12px;
-      background-color: #10b981;
-      color: #000;
-      font-weight: bold;
-      border-radius: 20px;
-      font-size: 0.85rem;
-    }
-    .card {
-      background-color: #242d3f;
-      padding: 15px;
-      border-radius: 8px;
-      margin-top: 15px;
-    }
-    code {
-      background-color: #0f172a;
-      padding: 2px 6px;
-      border-radius: 4px;
-      color: #38bdf8;
-    }
-  </style>
+  <title>CABT DRL - Crypto Asset BackTester by DRL</title>
+  <link rel="stylesheet" href="/css/style.css">
 </head>
+
 <body>
   <div class="container">
-    <h1>🚀 CABT DRL Data Manager <span class="status-badge">Running</span></h1>
-    <p>Node.js 기반 바이낸스 선물 데이터 수집기 및 서버 셋업이 완료되었습니다.</p>
-    
+    <header>
+      <h1>🚀 CABT DRL Data Manager</h1>
+      <span class="badge">Server Online</span>
+    </header>
+
+    <!-- [개선안 2] 수집 미달 시 화면에 출력되는 노란색 경고 토스트 팝업 -->
+    <div id="warningToast" class="toast-warning">
+      <div class="toast-header">⚠️ 데이터 수집 경고 (Warning)</div>
+      <div id="warningMsg">요청 수량보다 적은 데이터만 수집되었습니다.</div>
+    </div>
+
+    <!-- 데이터 수집 폼 -->
     <div class="card">
-      <h3>📡 데이터 수집 API 테스트 엔드포인트</h3>
-      <ul>
-        <li><strong>데이터 수집 및 저장:</strong> <code>GET /api/data/fetch?symbol=BTCUSDT&interval=1h&limit=100</code></li>
-        <li><strong>저장된 파일 목록:</strong> <code>GET /api/data/list</code></li>
-        <li><strong>서버 헬스 체크:</strong> <code>GET /api/health</code></li>
-      </ul>
+      <h2 class="card-title">📊 바이낸스 선물 OHLCV 데이터 수집</h2>
+      <form id="fetchForm">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="symbolInput">코인 심볼 (Symbol)</label>
+            <input type="text" id="symbolInput" value="BTCUSDT" placeholder="예: BTCUSDT, ETHUSDT" required>
+          </div>
+          <div class="form-group">
+            <label for="intervalSelect">타임프레임 (Interval)</label>
+            <select id="intervalSelect">
+              <option value="1m">1m (1분)</option>
+              <option value="5m">5m (5분)</option>
+              <option value="15m">15m (15분)</option>
+              <option value="1h" selected>1h (1시간)</option>
+              <option value="4h">4h (4시간)</option>
+              <option value="1d">1d (1일)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="limitInput">수집 목표 개수 (Limit)</label>
+            <input type="number" id="limitInput" value="100" placeholder="예: 100, 1000, 5000">
+          </div>
+          <div class="form-group">
+            <label for="saveSelect">로컬 파일 저장 여부</label>
+            <select id="saveSelect">
+              <option value="true" selected>저장함 (Save)</option>
+              <option value="false">저장 안함 (Temp View)</option>
+            </select>
+          </div>
+        </div>
+        <button type="submit" class="btn">데이터 수집하기</button>
+      </form>
+      <div id="jsonOutput" class="result-json">수집을 시작하려면 [데이터 수집하기] 버튼을 누르세요.</div>
+    </div>
+
+    <!-- 저장된 데이터 파일 목록 -->
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h2 class="card-title" style="margin-bottom: 0; border: none; padding: 0;">📁 저장된 데이터 파일 목록</h2>
+        <button id="refreshFilesBtn" class="btn" style="padding: 6px 14px; font-size: 0.85rem;">목록 새로고침</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>파일명</th>
+            <th>심볼 / 타임프레임</th>
+            <th>총 캔들 수</th>
+            <th>생성 일시</th>
+            <th>관리</th>
+          </tr>
+        </thead>
+        <tbody id="fileListTable">
+          <tr>
+            <td colspan="5">목록 로딩 중...</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
+
+  <script src="/js/app.js"></script>
 </body>
+
 </html>

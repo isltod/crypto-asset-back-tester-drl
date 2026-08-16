@@ -30,6 +30,7 @@ class DataController {
       if (save === 'true' && dataset.totalCount > 0) {
         // saveData가 writeFile를 사용...이게 비동기 함수라서 await...
         const saveResult = await dataStorageService.saveData(symbol, interval, dataset);
+        // 반환값들을 JSON 객체로 변환하고, http 응답 형식을 갖추고, 데이터 보내고, http 요청 종료까지...
         return res.json({
           success: true,
           message: `${dataset.totalCount}개의 캔들 데이터 수집 및 저장 완료`,
@@ -46,7 +47,10 @@ class DataController {
         meta: {
           symbol: dataset.symbol,
           interval: dataset.interval,
+          requestedLimit: dataset.requestedLimit,
           totalCount: dataset.totalCount,
+          isPartial: dataset.isPartial,
+          warning: dataset.warning,
           startTime: dataset.startTime,
           endTime: dataset.endTime,
         },
