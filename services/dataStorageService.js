@@ -103,6 +103,7 @@ class DataStorageService {
    * 특정 데이터 파일 읽기
    */
   async readDataFile(fileName) {
+    // 파일 경로에 ../ 등의 악성 코드가포함될 수 있으므로, basename으로 잘라준다.
     const safeFileName = path.basename(fileName);
     const filePath = path.join(DATA_DIR, safeFileName);
     const content = await fs.readFile(filePath, 'utf-8');
