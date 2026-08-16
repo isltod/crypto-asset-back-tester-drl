@@ -15,6 +15,7 @@ class DataStorageService {
    */
   async ensureDataDir() {
     try {
+      // recursive로 있으면 넘어가고, 없으면 중간 디렉토리까지 다 만들기...
       await fs.mkdir(DATA_DIR, { recursive: true });
     } catch (err) {
       console.error('Data directory creation failed:', err);
@@ -25,8 +26,9 @@ class DataStorageService {
    * 데이터를 JSON 파일로 저장
    */
   async saveData(symbol, interval, dataset) {
+    // 생성자에서도 했는데, 저장할 때마다 확인하네...
     await this.ensureDataDir();
-    
+
     const formattedSymbol = symbol.toLowerCase();
     const fileName = `${formattedSymbol}_${interval}_${dataset.totalCount}bars.json`;
     const filePath = path.join(DATA_DIR, fileName);
@@ -35,7 +37,10 @@ class DataStorageService {
       meta: {
         symbol: dataset.symbol,
         interval: dataset.interval,
+        requestedLimit: dataset.requestedLimit || null,
         totalCount: dataset.totalCount,
+        isPartial: dataset.isPartial || false,
+        warning: dataset.warning || null,
         startTime: dataset.startTime,
         endTime: dataset.endTime,
         startDate: dataset.startTime ? new Date(dataset.startTime).toISOString() : null,
