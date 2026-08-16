@@ -6,8 +6,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CABT DRL - Crypto Asset BackTester by DRL</title>
   <link rel="stylesheet" href="/css/style.css">
+  <!-- Flatpickr (깔끔한 24시간제 날짜/시간 피커) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <!-- TradingView Lightweight Charts 공식 CDN -->
+  <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
 </head>
-
 <body>
   <div class="container">
     <header>
@@ -19,6 +24,19 @@
     <div id="warningToast" class="toast-warning">
       <div class="toast-header">⚠️ 데이터 수집 경고 (Warning)</div>
       <div id="warningMsg">요청 수량보다 적은 데이터만 수집되었습니다.</div>
+    </div>
+
+    <!-- 📊 TradingView 캔들스틱 차트 뷰어 카드 -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-info">
+          <span id="chartSymbol" class="chart-symbol-badge">BTCUSDT</span>
+          <span id="chartInterval" style="font-weight: 600; color: #94a3b8;">1h</span>
+          <span id="chartDateRange" style="color: #64748b; font-size: 0.85rem;">데이터 대기 중</span>
+        </div>
+        <div id="chartTotalCount" style="color: #38bdf8; font-size: 0.9rem; font-weight: 600;">0 캔들</div>
+      </div>
+      <div id="chartContainer"></div>
     </div>
 
     <!-- 데이터 수집 폼 -->
@@ -42,8 +60,16 @@
             </select>
           </div>
           <div class="form-group">
+            <label for="startDateInput">시작 일시 (Start Time)</label>
+            <input type="text" id="startDateInput" placeholder="YYYY-MM-DD HH:mm" required>
+          </div>
+          <div class="form-group">
             <label for="limitInput">수집 목표 개수 (Limit)</label>
-            <input type="number" id="limitInput" value="100" placeholder="예: 100, 1000, 5000">
+            <input type="number" id="limitInput" value="100" min="1" placeholder="예: 100, 1000">
+          </div>
+          <div class="form-group">
+            <label for="endDateInput">종료 일시 (End Time)</label>
+            <input type="text" id="endDateInput" placeholder="YYYY-MM-DD HH:mm" required>
           </div>
           <div class="form-group">
             <label for="saveSelect">로컬 파일 저장 여부</label>
@@ -53,9 +79,9 @@
             </select>
           </div>
         </div>
-        <button type="submit" class="btn">데이터 수집하기</button>
+        <button type="submit" class="btn">데이터 수집 및 차트 보기</button>
       </form>
-      <div id="jsonOutput" class="result-json">수집을 시작하려면 [데이터 수집하기] 버튼을 누르세요.</div>
+      <div id="jsonOutput" class="result-json">수집을 시작하려면 [데이터 수집 및 차트 보기] 버튼을 누르세요.</div>
     </div>
 
     <!-- 저장된 데이터 파일 목록 -->
@@ -83,7 +109,9 @@
     </div>
   </div>
 
+  <script src="/js/chartManager.js"></script>
+  <script src="/js/datePickerManager.js"></script>
+  <script src="/js/fileListManager.js"></script>
   <script src="/js/app.js"></script>
 </body>
-
 </html>

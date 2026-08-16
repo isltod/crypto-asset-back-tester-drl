@@ -79,7 +79,7 @@ h1 {
 
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
   margin-bottom: 20px;
 }
@@ -93,11 +93,11 @@ h1 {
 label {
   font-size: 0.85rem;
   color: var(--text-muted);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 input, select {
-  background-color: var(--bg-primary);
+  background-color: var(--bg-main);
   border: 1px solid var(--border-color);
   color: var(--text-main);
   padding: 10px 14px;
@@ -105,10 +105,23 @@ input, select {
   font-size: 0.95rem;
   outline: none;
   transition: border-color 0.2s;
+  width: 100%;
+}
+
+input[type="datetime-local"] {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color-scheme: dark;
+  min-width: 210px;
+}
+
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
+  cursor: pointer;
+  margin-left: 4px;
 }
 
 input:focus, select:focus {
-  border-color: var(--accent-color);
+  border-color: var(--primary-color);
 }
 
 .btn {
@@ -134,6 +147,55 @@ input:focus, select:focus {
   background-color: var(--danger-color);
   padding: 4px 10px;
   font-size: 0.8rem;
+}
+
+.btn-secondary {
+  background-color: #475569;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
+.btn-secondary:hover {
+  background-color: #64748b;
+}
+
+/* 차트 뷰어 영역 */
+.chart-card {
+  background-color: var(--bg-secondary);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.chart-header {
+  padding: 16px 20px;
+  background-color: #1e293b;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chart-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.95rem;
+}
+
+.chart-symbol-badge {
+  background-color: #3b82f6;
+  color: #fff;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+#chartContainer {
+  width: 100%;
+  height: 450px;
+  position: relative;
 }
 
 /* 수집 미달 경고 토스트 팝업 (개선안 2) */
