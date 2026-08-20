@@ -105,7 +105,7 @@ class BacktestSimulator:
             # 3. 보유 포지션 업데이트 및 익절/손절 체크
             if current_pos:
                 if current_pos.engine_name == "MEAN_REVERSION":
-                    update_res = self.mean_revert_engine.update_position_fast(current_pos, curr_row)
+                    update_res = self.mean_revert_engine.update_position_fast(current_pos, curr_row, current_bar_idx=i)
                 else:
                     update_res = self.trend_engine.update_position_fast(current_pos, curr_row)
 

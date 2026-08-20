@@ -116,7 +116,11 @@ def add_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
     data['bb_upper'] = bb_upper
     data['bb_lower'] = bb_lower
     data['bb_bandwidth'] = bb_bw
+    data['bb_bandwidth_ma50'] = bb_bw.rolling(window=50).mean()
     data['bb_percent_b'] = bb_pct
+
+    # 장기 추세 필터 (200 EMA)
+    data['ema200'] = data['close'].ewm(span=200, adjust=False).mean()
 
     # 국면 지표 (Choppiness Index, ADX)
     data['choppiness'] = compute_choppiness_index(data['high'], data['low'], data['close'], period=14)
