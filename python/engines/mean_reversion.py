@@ -94,19 +94,21 @@ class MeanReversionEngine:
         return None
 
     def update_position_fast(self, pos: Position, curr: Dict[str, Any], current_bar_idx: int = 0) -> Dict[str, Any]:
-        """포지션 상태 업데이트 (80:20 분할익절 및 타임스탑)"""
+        """포지션 상태 업데이트 (보수적 손절 우선 + 80:20 분할익절 및 타임스탑)"""
         high = curr['high']
         low = curr['low']
-
-        # 1. 타임스탑 체크 (진입 후 12봉 경과 시 시장가 정리)
-        holding_bars = current_bar_idx - pos.entry_bar if pos.entry_bar > 0 else 0
-        if holding_bars >= self.max_holding_bars:
-            return {"action": "TIME_STOP", "exit_price": curr['close'], "closed_ratio": 1.0, "is_maker": False}
+        open_p = curr['open']
 
         if pos.side == PositionSide.LONG:
-            # 2. 손절 체크
+            # 1. 손절 체크 (최우선 순위, 갭다운 대응)
             if low <= pos.sl_price:
-                return {"action": "STOP_LOSS", "exit_price": pos.sl_price, "closed_ratio": 1.0, "is_maker": False}
+                exit_price = min(pos.sl_price, open_p) if open_p < pos.sl_price else pos.sl_price
+                return {"action": "STOP_LOSS", "exit_price": exit_price, "closed_ratio": 1.0, "is_maker": False}
+
+            # 2. 타임스탑 체크 (진입 후 12봉 경과 시 시장가 정리)
+            holding_bars = current_bar_idx - pos.entry_bar if pos.entry_bar > 0 else 0
+            if holding_bars >= self.max_holding_bars:
+                return {"action": "TIME_STOP", "exit_price": curr['close'], "closed_ratio": 1.0, "is_maker": False}
 
             # 3. 2차 전량 익절 (BB 상단)
             if pos.tp2_price and high >= pos.tp2_price:
@@ -119,9 +121,15 @@ class MeanReversionEngine:
                 return {"action": "HALF_TP", "exit_price": pos.tp1_price, "closed_ratio": self.tp1_ratio, "is_maker": True}
 
         elif pos.side == PositionSide.SHORT:
-            # 2. 손절 체크
+            # 1. 손절 체크 (최우선 순위, 갭업 대응)
             if high >= pos.sl_price:
-                return {"action": "STOP_LOSS", "exit_price": pos.sl_price, "closed_ratio": 1.0, "is_maker": False}
+                exit_price = max(pos.sl_price, open_p) if open_p > pos.sl_price else pos.sl_price
+                return {"action": "STOP_LOSS", "exit_price": exit_price, "closed_ratio": 1.0, "is_maker": False}
+
+            # 2. 타임스탑 체크 (진입 후 12봉 경과 시 시장가 정리)
+            holding_bars = current_bar_idx - pos.entry_bar if pos.entry_bar > 0 else 0
+            if holding_bars >= self.max_holding_bars:
+                return {"action": "TIME_STOP", "exit_price": curr['close'], "closed_ratio": 1.0, "is_maker": False}
 
             # 3. 2차 전량 익절 (BB 하단)
             if pos.tp2_price and low <= pos.tp2_price:

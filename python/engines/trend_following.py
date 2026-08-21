@@ -11,14 +11,16 @@ from python.risk.position_manager import Position, PositionSide
 
 
 class TrendFollowingEngine:
-    """추세 국면 200 EMA + 36봉 돌파 + ATR 트레일링 스탑 매매 엔진"""
+    """추세 국면 200 EMA + 36봉 돌파 + 보수적 ATR 트레일링 스탑 매매 엔진"""
 
     def __init__(
         self,
         adx_threshold: float = 25.0,
         breakout_lookback: int = 36,           # 36봉 (1.5일) 박스권
         sl_atr_multiplier: float = 1.5,
-        trailing_atr_multiplier: float = 3.0,  # 3.0 * ATR 트레일링
+        trailing_atr_multiplier: float = 3.0,  # 기본 트레일링 (3.0 * ATR)
+        long_trailing_atr: Optional[float] = None,   # 롱 전용 트레일링 배수 (None이면 trailing_atr_multiplier 사용)
+        short_trailing_atr: Optional[float] = None,  # 숏 전용 트레일링 배수 (None이면 trailing_atr_multiplier 사용)
         min_vol_mult: float = 0.5,             # 거래량 50% 이상 증가
         min_body_ratio: float = 0.45,          # 캔들 몸통 비율 45% 이상
     ):
@@ -26,7 +28,8 @@ class TrendFollowingEngine:
         self.adx_threshold = adx_threshold
         self.breakout_lookback = breakout_lookback
         self.sl_atr_multiplier = sl_atr_multiplier
-        self.trailing_atr_multiplier = trailing_atr_multiplier
+        self.long_trailing_atr = long_trailing_atr if long_trailing_atr is not None else trailing_atr_multiplier
+        self.short_trailing_atr = short_trailing_atr if short_trailing_atr is not None else trailing_atr_multiplier
         self.min_vol_mult = min_vol_mult
         self.min_body_ratio = min_body_ratio
 
@@ -94,29 +97,42 @@ class TrendFollowingEngine:
         return None
 
     def update_position_fast(self, pos: Position, curr: Dict[str, Any]) -> Dict[str, Any]:
-        """ATR 트레일링 스탑 업데이트"""
+        """
+        ATR 트레일링 스탑 업데이트 (보수적 체결 모델링: Optimistic Fill Bias 제거)
+        - 원칙: 직전 봉까지 확정된 손절가(sl_price) 도달 여부를 먼저 검사하여 손절/트레일링 청산 처리
+        - 손절되지 않은 경우에만 당일 고가/저가를 반영하여 다음 봉을 위한 sl_price 갱신
+        """
         high = curr['high']
         low = curr['low']
+        open_p = curr['open']
         atr = curr['atr']
 
         if pos.side == PositionSide.LONG:
+            # 1. 직전 확정 손절가 도달 여부 선검사 (보수적)
+            if low <= pos.sl_price:
+                # 갭다운 발생 시 open 가격으로 체결
+                exit_price = min(pos.sl_price, open_p) if open_p < pos.sl_price else pos.sl_price
+                return {"action": "TRAILING_STOP", "exit_price": exit_price, "closed_ratio": 1.0, "is_maker": False}
+
+            # 2. 손절되지 않은 경우에 한해 최고가 갱신 및 다음 봉을 위한 트레일링 상향
             if high > pos.highest_price:
                 pos.highest_price = high
 
-            trailing_sl = pos.highest_price - (atr * self.trailing_atr_multiplier)
+            trailing_sl = pos.highest_price - (atr * self.long_trailing_atr)
             pos.sl_price = max(pos.sl_price, trailing_sl)
 
-            if low <= pos.sl_price:
-                return {"action": "TRAILING_STOP", "exit_price": pos.sl_price, "closed_ratio": 1.0, "is_maker": False}
-
         elif pos.side == PositionSide.SHORT:
+            # 1. 직전 확정 손절가 도달 여부 선검사 (보수적)
+            if high >= pos.sl_price:
+                # 갭업 발생 시 open 가격으로 체결
+                exit_price = max(pos.sl_price, open_p) if open_p > pos.sl_price else pos.sl_price
+                return {"action": "TRAILING_STOP", "exit_price": exit_price, "closed_ratio": 1.0, "is_maker": False}
+
+            # 2. 손절되지 않은 경우에 한해 최저가 갱신 및 다음 봉을 위한 트레일링 하향
             if low < pos.lowest_price:
                 pos.lowest_price = low
 
-            trailing_sl = pos.lowest_price + (atr * self.trailing_atr_multiplier)
+            trailing_sl = pos.lowest_price + (atr * self.short_trailing_atr)
             pos.sl_price = min(pos.sl_price, trailing_sl)
-
-            if high >= pos.sl_price:
-                return {"action": "TRAILING_STOP", "exit_price": pos.sl_price, "closed_ratio": 1.0, "is_maker": False}
 
         return {"action": "NONE", "exit_price": 0.0, "closed_ratio": 0.0, "is_maker": False}
