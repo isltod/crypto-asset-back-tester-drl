@@ -14,8 +14,9 @@ from datetime import datetime, timezone
 import pandas as pd
 import numpy as np
 
-# 프로젝트 루트 디렉토리를 sys.path에 추가
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+# 프로젝트 루트 디렉토리 절대 경로 고정
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, PROJECT_ROOT)
 
 from rade.data_collector.binance_fetcher import BinanceFuturesFetcher
 from rade.utils.indicators import add_all_indicators
@@ -26,8 +27,8 @@ from rade.engines.trend_following import TrendFollowingEngine
 from rade.live.notifier import TelegramNotifier
 
 
-# 로깅 설정
-LIVE_DATA_DIR = os.path.join("data", "live")
+# 절대 경로 기준 데이터 디렉토리 설정
+LIVE_DATA_DIR = os.path.join(PROJECT_ROOT, "data", "live")
 os.makedirs(LIVE_DATA_DIR, exist_ok=True)
 LOG_FILE = os.path.join(LIVE_DATA_DIR, "paper_trader.log")
 
@@ -121,14 +122,14 @@ class PaperTrader:
         """1시간 단위 단일 실행 사이클 (Fetch -> Regime -> Update Position -> Signal Check -> Save)"""
         logger.info(f"=== [RADE Paper Trading Cycle Start: {self.symbol}] ===")
 
-        # 1. 최근 800개 캔들 실시간 다운로드
-        df_raw = self.fetcher.fetch_klines(
+        # 1. 최근 800개 캔들 실시간 초고속 다운로드 (단일 요청)
+        df_raw = self.fetcher.fetch_recent_klines(
             symbol=self.symbol,
             interval="1h",
             limit=800
         )
         if df_raw.empty or len(df_raw) < 730:
-            logger.error("최근 캔들 데이터 부족으로 사이클 중단.")
+            logger.error(f"최근 캔들 데이터 부족 ({len(df_raw)}개)으로 사이클 중단.")
             return
 
         df_raw["datetime"] = pd.to_datetime(df_raw["timestamp"], unit="ms", utc=True)

@@ -20,6 +20,43 @@ class BinanceFuturesFetcher:
         self.data_dir = data_dir
         os.makedirs(self.data_dir, exist_ok=True)
 
+    def fetch_recent_klines(
+        self,
+        symbol: str = "BTCUSDT",
+        interval: str = "1h",
+        limit: int = 800,
+    ) -> pd.DataFrame:
+        """
+        바이낸스 선물에서 가장 최근 N개(최대 1500) klines를 단일 REST 요청으로 즉시 반환 (페이퍼/실시간 전용)
+        """
+        params = {
+            "symbol": symbol,
+            "interval": interval,
+            "limit": min(limit, 1500),
+        }
+        res = requests.get(self.BASE_URL, params=params, timeout=10)
+        res.raise_for_status()
+        raw_data = res.json()
+
+        if not raw_data:
+            return pd.DataFrame()
+
+        columns = [
+            "timestamp", "open", "high", "low", "close", "volume",
+            "close_time", "quote_asset_volume", "number_of_trades",
+            "taker_buy_base_asset_volume", "taker_buy_quote_asset_volume", "ignore"
+        ]
+        df = pd.DataFrame(raw_data, columns=columns)
+        df.drop_duplicates(subset=["timestamp"], inplace=True)
+        df.sort_values(by="timestamp", inplace=True)
+        df.reset_index(drop=True, inplace=True)
+
+        for col in ["open", "high", "low", "close", "volume", "quote_asset_volume"]:
+            df[col] = df[col].astype(float)
+
+        df["datetime"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+        return df
+
     def fetch_klines(
         self,
         symbol: str = "BTCUSDT",
