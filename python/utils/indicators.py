@@ -101,6 +101,7 @@ def add_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
     # 수익률 및 변동성
     data['return'] = data['close'].pct_change()
     data['atr'] = compute_atr(data['high'], data['low'], data['close'], period=14)
+    data['atr_ma50'] = data['atr'].rolling(window=50).mean()
     data['atr_ratio'] = data['atr'] / (data['close'] + 1e-10)
     
     # 거래량 변화율 (20봉 이동평균 대비)

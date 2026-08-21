@@ -11,7 +11,7 @@ from python.risk.position_manager import Position, PositionSide
 
 
 class TrendFollowingEngine:
-    """추세 국면 200 EMA + 36봉 돌파 + 보수적 ATR 트레일링 스탑 매매 엔진"""
+    """추세 국면 200 EMA + 36봉 돌파 + 변동성 적응형 동적 ATR 트레일링 스탑 매매 엔진"""
 
     def __init__(
         self,
@@ -19,8 +19,8 @@ class TrendFollowingEngine:
         breakout_lookback: int = 36,           # 36봉 (1.5일) 박스권
         sl_atr_multiplier: float = 1.5,
         trailing_atr_multiplier: float = 3.0,  # 기본 트레일링 (3.0 * ATR)
-        long_trailing_atr: Optional[float] = None,   # 롱 전용 트레일링 배수 (None이면 trailing_atr_multiplier 사용)
-        short_trailing_atr: Optional[float] = None,  # 숏 전용 트레일링 배수 (None이면 trailing_atr_multiplier 사용)
+        max_trailing_atr: float = 4.0,         # 동적 트레일링 상한선 (4.0 * ATR Cap)
+        use_dynamic_trailing: bool = True,     # 동적 변동성 적응형 트레일링 사용 여부
         min_vol_mult: float = 0.5,             # 거래량 50% 이상 증가
         min_body_ratio: float = 0.45,          # 캔들 몸통 비율 45% 이상
     ):
@@ -28,10 +28,25 @@ class TrendFollowingEngine:
         self.adx_threshold = adx_threshold
         self.breakout_lookback = breakout_lookback
         self.sl_atr_multiplier = sl_atr_multiplier
-        self.long_trailing_atr = long_trailing_atr if long_trailing_atr is not None else trailing_atr_multiplier
-        self.short_trailing_atr = short_trailing_atr if short_trailing_atr is not None else trailing_atr_multiplier
+        self.trailing_atr_multiplier = trailing_atr_multiplier
+        self.max_trailing_atr = max_trailing_atr
+        self.use_dynamic_trailing = use_dynamic_trailing
         self.min_vol_mult = min_vol_mult
         self.min_body_ratio = min_body_ratio
+
+    def _get_effective_trailing_mult(self, curr: Dict[str, Any]) -> float:
+        """변동성 비율(ATR / ATR_MA50) 기반 유효 트레일링 배수 산출 (3.0x ~ 4.0x Cap)"""
+        if not self.use_dynamic_trailing:
+            return self.trailing_atr_multiplier
+
+        atr = curr.get('atr', 1.0)
+        atr_ma50 = curr.get('atr_ma50', atr)
+        if atr_ma50 <= 0:
+            atr_ma50 = atr
+
+        vol_ratio = max(1.0, atr / (atr_ma50 + 1e-10))
+        max_ratio = self.max_trailing_atr / self.trailing_atr_multiplier
+        return self.trailing_atr_multiplier * min(vol_ratio, max_ratio)
 
     def check_entry_signal_fast(self, i: int, records: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """고속 진입 시그널 검사"""
@@ -98,7 +113,7 @@ class TrendFollowingEngine:
 
     def update_position_fast(self, pos: Position, curr: Dict[str, Any]) -> Dict[str, Any]:
         """
-        ATR 트레일링 스탑 업데이트 (보수적 체결 모델링: Optimistic Fill Bias 제거)
+        동적 ATR 트레일링 스탑 업데이트 (보수적 체결 모델링)
         - 원칙: 직전 봉까지 확정된 손절가(sl_price) 도달 여부를 먼저 검사하여 손절/트레일링 청산 처리
         - 손절되지 않은 경우에만 당일 고가/저가를 반영하여 다음 봉을 위한 sl_price 갱신
         """
@@ -106,6 +121,8 @@ class TrendFollowingEngine:
         low = curr['low']
         open_p = curr['open']
         atr = curr['atr']
+
+        eff_mult = self._get_effective_trailing_mult(curr)
 
         if pos.side == PositionSide.LONG:
             # 1. 직전 확정 손절가 도달 여부 선검사 (보수적)
@@ -118,7 +135,7 @@ class TrendFollowingEngine:
             if high > pos.highest_price:
                 pos.highest_price = high
 
-            trailing_sl = pos.highest_price - (atr * self.long_trailing_atr)
+            trailing_sl = pos.highest_price - (atr * eff_mult)
             pos.sl_price = max(pos.sl_price, trailing_sl)
 
         elif pos.side == PositionSide.SHORT:
@@ -132,7 +149,7 @@ class TrendFollowingEngine:
             if low < pos.lowest_price:
                 pos.lowest_price = low
 
-            trailing_sl = pos.lowest_price + (atr * self.short_trailing_atr)
+            trailing_sl = pos.lowest_price + (atr * eff_mult)
             pos.sl_price = min(pos.sl_price, trailing_sl)
 
         return {"action": "NONE", "exit_price": 0.0, "closed_ratio": 0.0, "is_maker": False}

@@ -159,14 +159,20 @@ class BacktestSimulator:
             # 4. 신규 진입 시그널 검사
             if current_pos is None and not self.pos_manager.check_kill_switch(equity):
                 signal = None
-                weight = 1.0
 
+                # [국면 1: 평온 횡보] -> 평균회귀 엔진 가동
                 if curr_regime == RegimeState.RANGE:
                     signal = self.mean_revert_engine.check_entry_signal_fast(i, records)
-                    weight = curr_row.get('mean_revert_weight', 1.0)
-                elif curr_regime == RegimeState.TREND:
-                    signal = self.trend_engine.check_entry_signal_fast(i, records)
-                    weight = curr_row.get('trend_follow_weight', 1.0)
+
+                # [국면 2: 상승 추세] -> 추세추종 롱 가동
+                elif curr_regime == RegimeState.BULL_TREND:
+                    raw_sig = self.trend_engine.check_entry_signal_fast(i, records)
+                    if raw_sig and raw_sig['side'] == PositionSide.LONG:
+                        signal = raw_sig
+
+                # [국면 3: 위험/패닉 국면] -> 현금 100% 관망 (Cash Mode / No Trade)
+                elif curr_regime == RegimeState.BEAR_PANIC:
+                    signal = None
 
                 if signal:
                     raw_entry_price = next_row['open']
@@ -182,7 +188,7 @@ class BacktestSimulator:
                         entry_price=eff_entry_price,
                         sl_price=signal['sl_price'],
                         side=side,
-                        weight=weight,
+                        weight=1.0,
                     )
 
                     if pos_size > 0.0001:
