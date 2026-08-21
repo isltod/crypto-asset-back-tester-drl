@@ -22,35 +22,39 @@ from python.backtest.simulator import BacktestSimulator
 def run_full_backtest():
     print("=== [Phase 2] RADE 시스템 선물 백테스트 시작 ===")
 
-    # 1. 데이터 로드
+    # 1. 데이터 로드 (2021년~현재 4년 풀데이터 로드)
     fetcher = BinanceFuturesFetcher(data_dir="data")
-    df_raw = fetcher.get_or_download_data(
-        symbol="BTCUSDT",
-        interval="1h",
-        start_time_str="2023-01-01 00:00:00",
-        end_time_str="2024-06-01 00:00:00"
-    )
+    cache_file = os.path.join("data", "BTCUSDT_1h_2021_2024.csv")
+    if os.path.exists(cache_file):
+        df_raw = pd.read_csv(cache_file)
+        df_raw["datetime"] = pd.to_datetime(df_raw["timestamp"], unit="ms", utc=True)
+    else:
+        df_raw = fetcher.get_or_download_data(
+            symbol="BTCUSDT",
+            interval="1h",
+            start_time_str="2021-01-01 00:00:00",
+            end_time_str="2024-12-31 23:59:59"
+        )
 
     if df_raw.empty:
         print("[Error] 데이터 로드 실패")
         return
 
-    # 2. 지표 및 국면 계산
+    # 2. 지표 및 3-State 국면 계산
     print("기술적 지표 계산 중...")
     df_indicators = add_all_indicators(df_raw)
 
-    print("국면 분류(HMM + 룰 결합) 계산 중...")
+    print("3-State HMM 국면 분석 (Range, Bull, Bear/Panic Cash Mode) 계산 중...")
     regime_manager = RegimeManager(
         hmm_window=720,
         retrain_interval=168,
-        hysteresis_upper=0.65,
-        hysteresis_lower=0.35,
+        trans_threshold=0.45,
         cooldown_bars=3
     )
     df_processed = regime_manager.calculate_regime_probabilities(df_indicators)
 
     # 초기 HMM 윈도우(720봉) 이후부터 유효 백테스트 실행
-    test_df = df_processed.dropna(subset=['regime_trend_prob']).reset_index(drop=True)
+    test_df = df_processed.iloc[720:].reset_index(drop=True)
     print(f"백테스트 구간: 총 {len(test_df)}개 캔들 ({test_df['datetime'].iloc[0]} ~ {test_df['datetime'].iloc[-1]})")
 
     # 3. 백테스트 시뮬레이터 실행
