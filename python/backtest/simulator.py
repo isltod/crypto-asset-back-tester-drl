@@ -18,12 +18,14 @@ class BacktestSimulator:
     def __init__(
         self,
         initial_capital: float = 10000.0,
-        maker_fee_pct: float = 0.0002,      # 0.02% Maker 지정가 수수료
-        taker_fee_pct: float = 0.0005,      # 0.05% Taker 시장가 수수료
+        maker_fee_pct: float = 0.0002,      # 0.02% Maker 지정가 수수료 (지정가 익절용)
+        taker_fee_pct: float = 0.0005,      # 0.05% Taker 시장가 수수료 (진입, 손절, 트레일링용)
         slippage_pct: float = 0.0002,       # 0.02% 시장가 슬리피지
         funding_fee_pct: float = 0.0001,    # 8시간당 0.01% 펀딩비
-        risk_per_trade_pct: float = 0.01,   # 1회 1% 리스크
+        risk_per_trade_pct: float = 0.02,   # 1회 2% 리스크
         leverage: float = 3.0,
+        trend_engine: Optional[TrendFollowingEngine] = None,
+        mean_revert_engine: Optional[MeanReversionEngine] = None,
     ):
         self.initial_capital = initial_capital
         self.maker_fee_pct = maker_fee_pct
@@ -37,8 +39,8 @@ class BacktestSimulator:
             risk_per_trade_pct=risk_per_trade_pct,
             default_leverage=leverage
         )
-        self.mean_revert_engine = MeanReversionEngine()
-        self.trend_engine = TrendFollowingEngine()
+        self.mean_revert_engine = mean_revert_engine or MeanReversionEngine()
+        self.trend_engine = trend_engine or TrendFollowingEngine()
 
     def run(self, df: pd.DataFrame) -> Dict[str, Any]:
         """고속 딕셔너리 리스트 순회 백테스트 실행"""
@@ -82,6 +84,7 @@ class BacktestSimulator:
                 if is_losing:
                     exit_price = curr_row['close'] * (1.0 - self.slippage_pct if current_pos.side == PositionSide.LONG else 1.0 + self.slippage_pct)
                     pnl = (exit_price - current_pos.entry_price) * current_pos.size if current_pos.side == PositionSide.LONG else (current_pos.entry_price - exit_price) * current_pos.size
+                    # 진입(Taker) + 청산(Taker) 수수료
                     fee = (current_pos.entry_price * current_pos.size + exit_price * current_pos.size) * self.taker_fee_pct
                     net_pnl = pnl - fee
                     equity += net_pnl
@@ -120,17 +123,18 @@ class BacktestSimulator:
                     # 지정가 익절은 슬리피지 없이 Maker 수수료, 손절/트레일링은 슬리피지 + Taker 수수료
                     if is_maker:
                         eff_exit_price = exit_price
-                        fee_rate = self.maker_fee_pct
+                        exit_fee_rate = self.maker_fee_pct
                     else:
                         eff_exit_price = exit_price * (1.0 - self.slippage_pct if current_pos.side == PositionSide.LONG else 1.0 + self.slippage_pct)
-                        fee_rate = self.taker_fee_pct
+                        exit_fee_rate = self.taker_fee_pct
 
                     if current_pos.side == PositionSide.LONG:
                         pnl = (eff_exit_price - current_pos.entry_price) * closed_size
                     else:
                         pnl = (current_pos.entry_price - eff_exit_price) * closed_size
 
-                    fee = (current_pos.entry_price * closed_size * self.maker_fee_pct) + (eff_exit_price * closed_size * fee_rate)
+                    # 진입은 실전 시장가(Taker) 수수료, 청산은 exit_fee_rate
+                    fee = (current_pos.entry_price * closed_size * self.taker_fee_pct) + (eff_exit_price * closed_size * exit_fee_rate)
                     net_pnl = pnl - fee
                     equity += net_pnl
 
@@ -167,8 +171,11 @@ class BacktestSimulator:
                 if signal:
                     raw_entry_price = next_row['open']
                     side = signal['side']
-                    # 진입은 지정가(Maker) 체결 모델링
-                    eff_entry_price = raw_entry_price
+                    # 진입은 실전 시장가(Taker) + 슬리피지 모델링 적용
+                    if side == PositionSide.LONG:
+                        eff_entry_price = raw_entry_price * (1.0 + self.slippage_pct)
+                    else:
+                        eff_entry_price = raw_entry_price * (1.0 - self.slippage_pct)
 
                     pos_size = self.pos_manager.calculate_position_size(
                         equity=equity,
@@ -220,8 +227,8 @@ class BacktestSimulator:
         total_return_pct = ((eq_arr[-1] - self.initial_capital) / self.initial_capital) * 100.0
 
         peak = np.maximum.accumulate(eq_arr)
-        drawdowns = (eq_arr - peak) / peak
-        mdd_pct = abs(drawdowns.min()) * 100.0
+        drawdowns = (eq_arr - peak) / (peak + 1e-10)
+        mdd_pct = abs(float(drawdowns.min())) * 100.0
 
         if not trades:
             return {
