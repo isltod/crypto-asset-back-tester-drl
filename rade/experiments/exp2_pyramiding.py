@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Any, Optional
-from rade.data.binance_fetcher import BinanceFuturesFetcher
+from rade.data_collector.binance_fetcher import BinanceFuturesFetcher
 from rade.utils.indicators import add_all_indicators
 from rade.regime.regime_manager import RegimeManager, RegimeState
 from rade.risk.position_manager import Position, PositionSide, PositionManager

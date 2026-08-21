@@ -1,7 +1,7 @@
 #! 뭔가 적용되지 않는다면 git rm -r --cached . 하고 다시 진행
 # AI train
 ptb.*.*
-data/
+/data/
 *.pth
 *.tsv
 horse-or-human/

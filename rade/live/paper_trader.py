@@ -17,7 +17,7 @@ import numpy as np
 # 프로젝트 루트 디렉토리를 sys.path에 추가
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-from rade.data.binance_fetcher import BinanceFuturesFetcher
+from rade.data_collector.binance_fetcher import BinanceFuturesFetcher
 from rade.utils.indicators import add_all_indicators
 from rade.regime.regime_manager import RegimeManager, RegimeState
 from rade.risk.position_manager import PositionSide, PositionManager

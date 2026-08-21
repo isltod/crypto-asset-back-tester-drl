@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..',
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from rade.data.binance_fetcher import BinanceFuturesFetcher
+from rade.data_collector.binance_fetcher import BinanceFuturesFetcher
 from rade.utils.indicators import add_all_indicators
 from rade.regime.regime_manager import RegimeManager
 from rade.backtest.simulator import BacktestSimulator
