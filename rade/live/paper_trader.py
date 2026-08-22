@@ -67,13 +67,14 @@ class PaperTrader:
         self.state_file = os.path.join(LIVE_DATA_DIR, "state.json")
         self.trades_file = os.path.join(LIVE_DATA_DIR, "trades_history.csv")
         self.snapshots_file = os.path.join(LIVE_DATA_DIR, "hourly_snapshots.csv")
+        self.model_file = os.path.join(LIVE_DATA_DIR, "hmm_model.pkl")
 
         self.fetcher = BinanceFuturesFetcher(data_dir=LIVE_DATA_DIR)
         self.notifier = TelegramNotifier()
         self.pos_manager = PositionManager(risk_per_trade_pct=risk_per_trade_pct, default_leverage=leverage)
         self.mr_engine = MeanReversionEngine()
         self.tf_engine = TrendFollowingEngine()
-        self.regime_manager = RegimeManager(hmm_window=720, retrain_interval=168, trans_threshold=0.45, cooldown_bars=3)
+        self.regime_manager = RegimeManager(hmm_window=720, retrain_interval=168, anchor_dayofweek=6, trans_threshold=0.45, cooldown_bars=3)
 
         self.state = self._load_state()
 
@@ -184,10 +185,10 @@ class PaperTrader:
         df_raw.sort_values(by="timestamp", inplace=True)
         df_raw.reset_index(drop=True, inplace=True)
 
-        # 2. 지표 및 3-State HMM 국면 산출
+        # 2. 지표 및 3-State HMM 국면 산출 (주 1회 일요일 09:00 KST 재학습 + 매시간 최신 사후확률 실시간 추론)
         df_ind = add_all_indicators(df_raw)
-        df_proc = self.regime_manager.calculate_regime_probabilities(df_ind)
-        records = df_proc.to_dict('records')
+        regime_info, retrained = self.regime_manager.update_live_regime(df_ind, model_path=self.model_file)
+        records = df_ind.to_dict('records')
 
         curr_bar = records[-1]  # 방금 마감된 최신 캔들
         utc_dt = pd.to_datetime(curr_bar['timestamp'], unit='ms', utc=True)
@@ -196,12 +197,23 @@ class PaperTrader:
         today_kst_str = kst_dt.strftime('%Y-%m-%d')
 
         close_p = curr_bar['close']
-        curr_regime = curr_bar.get('regime_state', RegimeState.RANGE)
-        p_range = curr_bar.get('p_range', 0.0)
-        p_bull = curr_bar.get('p_bull', 0.0)
-        p_bear = curr_bar.get('p_bear', 0.0)
+        curr_regime = regime_info['regime_state']
+        p_range = regime_info['p_range']
+        p_bull = regime_info['p_bull']
+        p_bear = regime_info['p_bear']
 
-        logger.info(f"[{curr_time_kst}] 종가: ${close_p:,.2f} | 국면: {curr_regime} (Range:{p_range:.1%}, Bull:{p_bull:.1%}, Bear:{p_bear:.1%})")
+        logger.info(f"[{curr_time_kst}] 종가: ${close_p:,.2f} | 국면: {curr_regime} (Range:{p_range:.1%}, Bull:{p_bull:.1%}, Bear:{p_bear:.1%}) | HMM재학습: {retrained}")
+
+        # 2-0. 주간 HMM 정기 재학습 알림 (일요일 오전 9시 KST)
+        if retrained and regime_info.get("is_anchor_time", False):
+            msg_retrain = (
+                f"🧠 *[RADE HMM 주간 정기 재학습 완료]*\n"
+                f"• *기준 시각*: `{curr_time_kst}` (매주 일요일 자정 UTC 앵커)\n"
+                f"• *학습 표본*: 최근 30일(720시간) 캔들 데이터\n"
+                f"• *갱신 국면*: `{curr_regime}` (Range:{p_range:.1%}, Bull:{p_bull:.1%}, Bear:{p_bear:.1%})\n"
+                f"• *모델 상태*: `data/live/hmm_model.pkl` 정상 갱신 완료"
+            )
+            self.notifier.send_message(msg_retrain)
 
         # 2-1. 국면 전환(Regime Shift) 감지 및 실시간 알림
         prev_regime = self.state.get("current_regime")
@@ -253,7 +265,7 @@ class PaperTrader:
             pos_obj = PosAdapter(pos)
 
             if pos_obj.engine_name == "MEAN_REVERSION":
-                update_res = self.mr_engine.update_position_fast(pos_obj, curr_bar, current_bar_idx=len(records)-1)
+                update_res = self.mr_engine.update_position_fast(pos_obj, curr_bar, current_bar_idx=len(df_ind)-1)
             else:
                 update_res = self.tf_engine.update_position_fast(pos_obj, curr_bar)
 
