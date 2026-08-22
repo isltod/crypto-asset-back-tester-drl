@@ -142,19 +142,23 @@ class PaperTrader:
         records = df_proc.to_dict('records')
 
         curr_bar = records[-1]  # 방금 마감된 최신 캔들
-        curr_time = str(curr_bar.get('datetime', ''))
+        utc_dt = pd.to_datetime(curr_bar['timestamp'], unit='ms', utc=True)
+        kst_dt = utc_dt.tz_convert('Asia/Seoul')
+        curr_time_kst = kst_dt.strftime('%Y-%m-%d %H:%M:%S KST')
+        curr_time_iso = utc_dt.isoformat()
+
         close_p = curr_bar['close']
         curr_regime = curr_bar.get('regime_state', RegimeState.RANGE)
         p_range = curr_bar.get('p_range', 0.0)
         p_bull = curr_bar.get('p_bull', 0.0)
         p_bear = curr_bar.get('p_bear', 0.0)
 
-        logger.info(f"[{curr_time}] 종가: ${close_p:,.2f} | 국면: {curr_regime} (Range:{p_range:.1%}, Bull:{p_bull:.1%}, Bear:{p_bear:.1%})")
+        logger.info(f"[{curr_time_kst}] 종가: ${close_p:,.2f} | 국면: {curr_regime} (Range:{p_range:.1%}, Bull:{p_bull:.1%}, Bear:{p_bear:.1%})")
 
-        # 3. 펀딩비 결제 (매 8시간 주기: 00:00, 08:00, 16:00 UTC)
+        # 3. 펀딩비 결제 (매 8시간 주기: 00:00, 08:00, 16:00 UTC = 09:00, 17:00, 01:00 KST)
         pos = self.state.get("position")
-        current_hour = pd.to_datetime(curr_bar['timestamp'], unit='ms', utc=True).hour
-        if pos and (current_hour % 8 == 0):
+        current_hour_utc = utc_dt.hour
+        if pos and (current_hour_utc % 8 == 0):
             notional = pos['size'] * close_p
             funding_cost = notional * self.funding_fee_pct
             self.state['equity'] -= funding_cost
@@ -227,7 +231,7 @@ class PaperTrader:
                     "side": pos['side'],
                     "leverage": self.leverage,
                     "entry_time": pos['entry_time'],
-                    "exit_time": curr_time,
+                    "exit_time": curr_time_kst,
                     "entry_price": pos['entry_price'],
                     "exit_price": eff_exit_p,
                     "size": closed_size,
@@ -244,6 +248,7 @@ class PaperTrader:
 
                 msg = (
                     f"🎯 *[RADE 페이퍼 포지션 청산]*\n"
+                    f"• *시각*: `{curr_time_kst}`\n"
                     f"• *사유*: `{action}`\n"
                     f"• *포지션*: `{pos['side']}` {closed_size:.4f} BTC ({pos['engine']})\n"
                     f"• *진입가*: ${pos['entry_price']:,.2f} ➔ *청산가*: ${eff_exit_p:,.2f}\n"
@@ -292,7 +297,7 @@ class PaperTrader:
                         "side": side_str,
                         "engine": signal['engine'],
                         "regime_at_entry": curr_regime,
-                        "entry_time": curr_time,
+                        "entry_time": curr_time_kst,
                         "entry_price": eff_entry_price,
                         "size": pos_size,
                         "sl_price": signal['sl_price'],
@@ -308,6 +313,7 @@ class PaperTrader:
 
                     msg = (
                         f"🚀 *[RADE 페이퍼 신규 진입]*\n"
+                        f"• *시각*: `{curr_time_kst}`\n"
                         f"• *엔진*: `{signal['engine']}`\n"
                         f"• *국면*: `{curr_regime}` (Bull:{p_bull:.1%}, Bear:{p_bear:.1%})\n"
                         f"• *포지션*: *{side_str}* {pos_size:.4f} BTC ({self.leverage}x)\n"
@@ -327,7 +333,7 @@ class PaperTrader:
 
         snapshot = {
             "timestamp": curr_bar['timestamp'],
-            "datetime": curr_time,
+            "datetime_kst": curr_time_kst,
             "btc_close": close_p,
             "regime_state": curr_regime,
             "p_range": p_range,
