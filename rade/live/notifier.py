@@ -4,6 +4,7 @@
 - 미설정 시 콘솔 로깅으로 Fallback 작동
 """
 import os
+import sys
 import requests
 from dotenv import load_dotenv
 
@@ -18,8 +19,12 @@ class TelegramNotifier:
 
     def send_message(self, text: str):
         """텔레그램 메시지 발송 (Markdown 지원)"""
-        # 콘솔 출력
-        print(f"\n[NOTIFIER]\n{text}\n")
+        # 콘솔 출력 (Windows cp949 호환성 처리)
+        try:
+            print(f"\n[NOTIFIER]\n{text}\n")
+        except Exception:
+            safe_text = text.encode(sys.stdout.encoding or 'utf-8', errors='replace').decode(sys.stdout.encoding or 'utf-8')
+            print(f"\n[NOTIFIER]\n{safe_text}\n")
 
         if not self.is_active:
             return

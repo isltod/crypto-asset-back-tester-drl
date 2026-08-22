@@ -91,8 +91,10 @@ class PaperTrader:
             "initial_capital": self.initial_capital,
             "equity": self.initial_capital,
             "position": None,  # 보유 포지션 객체 딕셔너리
-            "current_regime": RegimeState.RANGE,
+            "current_regime": None,  # 최초 시작 시 None으로 설정하여 첫 국면 감지
             "last_trade_id": 0,
+            "is_initialized": False,
+            "last_daily_report_date": "",
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -101,6 +103,22 @@ class PaperTrader:
         self.state["updated_at"] = datetime.now(timezone.utc).isoformat()
         with open(self.state_file, "w", encoding="utf-8") as f:
             json.dump(self.state, f, indent=2, ensure_ascii=False)
+
+    def notify_start(self):
+        """시스템 최초 가동 시작 알림 발송"""
+        kst_now = datetime.now(timezone.utc).astimezone(timezone(pd.Timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S KST')
+        msg = (
+            f"🟢 *[RADE 페이퍼 트레이딩 시스템 가동 시작]*\n"
+            f"• *시작 시각*: `{kst_now}`\n"
+            f"• *초기 자본*: `${self.state['equity']:,.2f}`\n"
+            f"• *거래 대상*: `{self.symbol} (선물 1시간봉)`\n"
+            f"• *국면 모델*: `3-State Gaussian HMM (Cash Mode)`\n"
+            f"• *전략 엔진*: `추세추종 (동적 4.0x ATR) + 평균회귀`\n"
+            f"• *스케줄러*: `매 정시(00:05) 자동 분석 및 포지션 관리 가동`"
+        )
+        self.notifier.send_message(msg)
+        self.state["is_initialized"] = True
+        self._save_state()
 
     def _append_trade_history(self, trade_record: Dict[str, Any]):
         """완료된 거래 내역을 trades_history.csv에 영구 기록"""
@@ -118,9 +136,39 @@ class PaperTrader:
         else:
             df_new.to_csv(self.snapshots_file, mode="a", header=False, index=False, encoding="utf-8-sig")
 
-    def execute_cycle(self):
+    def _send_daily_report(self, curr_time_kst: str, close_p: float, curr_regime: str, p_bull: float, p_bear: float, unrealized_pnl: float):
+        """매일 오전 9시 KST 정기 계좌 브리핑 발송"""
+        pos = self.state.get("position")
+        total_equity = self.state['equity'] + unrealized_pnl
+        init_cap = self.state.get("initial_capital", self.initial_capital)
+        total_ret_pct = ((total_equity - init_cap) / init_cap) * 100.0
+
+        if pos:
+            pos_info = f"`{pos['side']}` {pos['size']:.4f} BTC (진입: ${pos['entry_price']:,.2f} | 평가손익: ${unrealized_pnl:+,.2f})"
+        else:
+            pos_info = "보유 포지션 없음 (현금 대기)"
+
+        # 거래 통계
+        trade_cnt = self.state.get("last_trade_id", 0)
+
+        msg = (
+            f"📊 *[RADE 일일 정기 브리핑 (오전 9시)]*\n"
+            f"• *기준 일시*: `{curr_time_kst}`\n"
+            f"• *비트코인 종가*: `${close_p:,.2f}`\n"
+            f"• *현재 국면*: `{curr_regime}` (Bull:{p_bull:.1%}, Bear:{p_bear:.1%})\n"
+            f"• *총 평가 자본*: *${total_equity:,.2f} ({total_ret_pct:+.2f}%)*\n"
+            f"• *보유 포지션*: {pos_info}\n"
+            f"• *누적 완료 거래*: {trade_cnt}회"
+        )
+        self.notifier.send_message(msg)
+
+    def execute_cycle(self, force_start_notify: bool = False):
         """1시간 단위 단일 실행 사이클 (Fetch -> Regime -> Update Position -> Signal Check -> Save)"""
         logger.info(f"=== [RADE Paper Trading Cycle Start: {self.symbol}] ===")
+
+        # 0. 최초 실행 시작 알림 체크
+        if force_start_notify or not self.state.get("is_initialized", False):
+            self.notify_start()
 
         # 1. 최근 800개 캔들 실시간 초고속 다운로드 (단일 요청)
         df_raw = self.fetcher.fetch_recent_klines(
@@ -145,7 +193,7 @@ class PaperTrader:
         utc_dt = pd.to_datetime(curr_bar['timestamp'], unit='ms', utc=True)
         kst_dt = utc_dt.tz_convert('Asia/Seoul')
         curr_time_kst = kst_dt.strftime('%Y-%m-%d %H:%M:%S KST')
-        curr_time_iso = utc_dt.isoformat()
+        today_kst_str = kst_dt.strftime('%Y-%m-%d')
 
         close_p = curr_bar['close']
         curr_regime = curr_bar.get('regime_state', RegimeState.RANGE)
@@ -154,6 +202,25 @@ class PaperTrader:
         p_bear = curr_bar.get('p_bear', 0.0)
 
         logger.info(f"[{curr_time_kst}] 종가: ${close_p:,.2f} | 국면: {curr_regime} (Range:{p_range:.1%}, Bull:{p_bull:.1%}, Bear:{p_bear:.1%})")
+
+        # 2-1. 국면 전환(Regime Shift) 감지 및 실시간 알림
+        prev_regime = self.state.get("current_regime")
+        if prev_regime is not None and prev_regime != curr_regime:
+            action_desc = {
+                RegimeState.BULL_TREND: "🚀 [상승 추세] 추세추종 롱 엔진 가동 (동적 4.0x ATR 트레일링)",
+                RegimeState.RANGE: "⚖️ [평온 횡보] 평균회귀 80:20 분할익절 엔진 가동",
+                RegimeState.BEAR_PANIC: "🛡️ [위험/패닉] 현금 100% 안전 관망 (Cash Mode / No Trade)",
+            }.get(curr_regime, "시장 관망")
+
+            msg = (
+                f"🔄 *[RADE 시장 국면 전환 감지]*\n"
+                f"• *시각*: `{curr_time_kst}`\n"
+                f"• *국면 변화*: `{prev_regime}` ➔ *`{curr_regime}`*\n"
+                f"• *확률 분포*: `Range: {p_range:.1%}` | `Bull: {p_bull:.1%}` | `Bear: {p_bear:.1%}`\n"
+                f"• *비트코인 종가*: `${close_p:,.2f}`\n"
+                f"• *시스템 대응*: {action_desc}"
+            )
+            self.notifier.send_message(msg)
 
         # 3. 펀딩비 결제 (매 8시간 주기: 00:00, 08:00, 16:00 UTC = 09:00, 17:00, 01:00 KST)
         pos = self.state.get("position")
@@ -347,7 +414,12 @@ class PaperTrader:
         }
         self._append_hourly_snapshot(snapshot)
 
-        # 7. 상태 파일 저장
+        # 7. 매일 오전 09:00 KST 일일 정기 브리핑 알림
+        if kst_dt.hour == 9 and self.state.get("last_daily_report_date") != today_kst_str:
+            self._send_daily_report(curr_time_kst, close_p, curr_regime, p_bull, p_bear, unrealized_pnl)
+            self.state["last_daily_report_date"] = today_kst_str
+
+        # 8. 상태 파일 저장
         self.state['current_regime'] = curr_regime
         self._save_state()
 
@@ -355,5 +427,21 @@ class PaperTrader:
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="RADE Paper Trader")
+    parser.add_argument("--notify-start", action="store_true", help="시스템 가동 시작 알림을 텔레그램으로 강제 발송")
+    parser.add_argument("--daily-report", action="store_true", help="일일 정기 브리핑을 텔레그램으로 즉시 발송")
+    args = parser.parse_args()
+
     trader = PaperTrader(symbol="BTCUSDT", initial_capital=10000.0)
-    trader.execute_cycle()
+
+    if args.daily_report:
+        # 즉시 일일 브리핑 테스트
+        pos = trader.state.get("position")
+        close_p = 78000.0  # 기본값
+        unrealized = 0.0
+        trader._send_daily_report("수동 요청", close_p, trader.state.get("current_regime", "BULL_TREND"), 0.95, 0.05, unrealized)
+    else:
+        trader.execute_cycle(force_start_notify=args.notify_start)
+
