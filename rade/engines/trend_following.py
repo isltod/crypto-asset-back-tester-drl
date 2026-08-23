@@ -19,7 +19,7 @@ class TrendFollowingEngine:
         breakout_lookback: int = 36,           # 36봉 (1.5일) 박스권
         sl_atr_multiplier: float = 1.5,
         trailing_atr_multiplier: float = 3.0,  # 기본 트레일링 (3.0 * ATR)
-        max_trailing_atr: float = 4.0,         # 동적 트레일링 상한선 (4.0 * ATR Cap)
+        max_trailing_atr: float = 4.5,         # 동적 트레일링 상한선 (4.5 * ATR Cap, 최적 조합 C)
         use_dynamic_trailing: bool = True,     # 동적 변동성 적응형 트레일링 사용 여부
         min_vol_mult: float = 0.5,             # 거래량 50% 이상 증가
         min_body_ratio: float = 0.45,          # 캔들 몸통 비율 45% 이상

@@ -19,7 +19,7 @@ class MeanReversionEngine:
         rsi_overbought: float = 65.0,
         sl_atr_multiplier: float = 1.2,
         tp1_ratio: float = 0.8,       # 1차 중심선 익절 80% (승률 및 수익 확정 극대화)
-        max_holding_bars: int = 12,   # 12봉 타임스탑
+        max_holding_bars: int = 24,   # 24봉 (24시간) 타임스탑 (최적 조합 C)
     ):
         self.name = "MEAN_REVERSION"
         self.rsi_oversold = rsi_oversold

@@ -27,7 +27,7 @@ class RegimeManager:
         retrain_interval: int = 168,    # HMM 재학습 주기 (168봉 = 1주일)
         anchor_dayofweek: int = 6,      # 캘린더 앵커 요일 (6 = 일요일, 00:00 UTC = 09:00 KST)
         trans_threshold: float = 0.45,  # 상태 전환 최소 사후확률 임계값
-        cooldown_bars: int = 3,         # 국면 전환 후 신규 진입 대기 봉 수
+        cooldown_bars: int = 0,         # 국면 전환 후 신규 진입 대기 봉 수 (0: 즉시 진입)
     ):
         self.hmm_window = hmm_window
         self.retrain_interval = retrain_interval
