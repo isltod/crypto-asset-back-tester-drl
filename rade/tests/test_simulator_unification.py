@@ -32,8 +32,8 @@ def run_unification_test():
     df_ind = add_all_indicators(df_all)
 
     # 2. HMM 3-State 국면 계산 (프로덕션 RegimeManager 직접 사용)
-    print("[Step 2] 3-State HMM 주간 앵커링 국면 계산 (TH=0.45)...")
-    reg_mgr = RegimeManager(hmm_window=720, retrain_interval=168, trans_threshold=0.45, cooldown_bars=0)
+    print("[Step 2] 3-State HMM 주간 앵커링 국면 계산 (TH=0.74)...")
+    reg_mgr = RegimeManager(hmm_window=720, retrain_interval=168, trans_threshold=0.74, cooldown_bars=0)
     df_processed = reg_mgr.calculate_regime_probabilities(df_ind)
     test_df = df_processed.iloc[720:].reset_index(drop=True)
 

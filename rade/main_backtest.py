@@ -54,7 +54,7 @@ def run_full_backtest():
     regime_manager = RegimeManager(
         hmm_window=720,
         retrain_interval=168,
-        trans_threshold=0.45,
+        trans_threshold=0.74,  # 최적 조합 C 검증 완료 표준값 (TH=0.74)
         cooldown_bars=0  # 최적 조합 C (즉시 유기적 진입)
     )
     df_processed = regime_manager.calculate_regime_probabilities(df_indicators)
