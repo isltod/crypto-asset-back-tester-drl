@@ -349,8 +349,10 @@ class PaperTrader:
             last_idx = len(records) - 1
 
             if curr_regime == RegimeState.RANGE:
+                self.pos_manager.risk_per_trade_pct = 0.040  # 횡보장 공식 표준 4.0% 고승률 리스크
                 signal = self.mr_engine.check_entry_signal_fast(last_idx, records)
             elif curr_regime == RegimeState.BULL_TREND:
+                self.pos_manager.risk_per_trade_pct = 0.025  # 추세장 공식 표준 2.5% 리스크
                 raw_sig = self.tf_engine.check_entry_signal_fast(last_idx, records)
                 if raw_sig and raw_sig['side'] == PositionSide.LONG:
                     signal = raw_sig

@@ -67,7 +67,8 @@ def run_full_backtest():
     print("\n선물 백테스트 시뮬레이션 가동...")
     simulator = BacktestSimulator(
         initial_capital=10000.0,      # 시작 자금 $10,000
-        risk_per_trade_pct=0.02,      # 1회 2.0% 리스크
+        trend_risk_pct=0.025,         # 공식 표준 추세장 2.5% 리스크
+        mr_risk_pct=0.040,            # 공식 표준 횡보장 4.0% 리스크
         leverage=3.0,                 # 레버리지 3x
         bear_mode="CASH",
         use_regime_transition_cut=False,
