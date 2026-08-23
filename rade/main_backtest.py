@@ -17,18 +17,24 @@ from rade.data_collector.binance_fetcher import BinanceFuturesFetcher
 from rade.utils.indicators import add_all_indicators
 from rade.regime.regime_manager import RegimeManager
 from rade.backtest.simulator import BacktestSimulator
+from rade.engines.trend_following import TrendFollowingEngine
+from rade.engines.mean_reversion import MeanReversionEngine
 
 
 def run_full_backtest():
     print("=== [Phase 2] RADE 시스템 선물 백테스트 시작 ===")
 
-    # 1. 데이터 로드 (2021년~현재 4년 풀데이터 로드)
-    fetcher = BinanceFuturesFetcher(data_dir="data")
-    cache_file = os.path.join("data", "BTCUSDT_1h_2021_2024.csv")
-    if os.path.exists(cache_file):
-        df_raw = pd.read_csv(cache_file)
+    # 1. 데이터 로드 (2021년~2024년 4년 풀데이터 결합 로드)
+    f_is = "data/BTCUSDT_1h_2021_2024.csv"
+    f_oos = "data/BTCUSDT_1h_2024_OOS.csv"
+    if os.path.exists(f_is) and os.path.exists(f_oos):
+        df_raw = pd.concat([pd.read_csv(f_is), pd.read_csv(f_oos)], ignore_index=True).drop_duplicates(subset=["timestamp"]).sort_values(by="timestamp").reset_index(drop=True)
+        df_raw["datetime"] = pd.to_datetime(df_raw["timestamp"], unit="ms", utc=True)
+    elif os.path.exists(f_is):
+        df_raw = pd.read_csv(f_is)
         df_raw["datetime"] = pd.to_datetime(df_raw["timestamp"], unit="ms", utc=True)
     else:
+        fetcher = BinanceFuturesFetcher(data_dir="data")
         df_raw = fetcher.get_or_download_data(
             symbol="BTCUSDT",
             interval="1h",
@@ -49,7 +55,7 @@ def run_full_backtest():
         hmm_window=720,
         retrain_interval=168,
         trans_threshold=0.45,
-        cooldown_bars=3
+        cooldown_bars=0  # 최적 조합 C (즉시 유기적 진입)
     )
     df_processed = regime_manager.calculate_regime_probabilities(df_indicators)
 
@@ -57,12 +63,16 @@ def run_full_backtest():
     test_df = df_processed.iloc[720:].reset_index(drop=True)
     print(f"백테스트 구간: 총 {len(test_df)}개 캔들 ({test_df['datetime'].iloc[0]} ~ {test_df['datetime'].iloc[-1]})")
 
-    # 3. 백테스트 시뮬레이터 실행
+    # 3. 백테스트 시뮬레이터 실행 (최적 조합 C: 동적 ATR 4.5x, 타임스탑 24h)
     print("\n선물 백테스트 시뮬레이션 가동...")
     simulator = BacktestSimulator(
         initial_capital=10000.0,      # 시작 자금 $10,000
-        risk_per_trade_pct=0.02,      # 1회 2.0% 리스크 (검증된 최적 밸런스 세팅)
+        risk_per_trade_pct=0.02,      # 1회 2.0% 리스크
         leverage=3.0,                 # 레버리지 3x
+        bear_mode="CASH",
+        use_regime_transition_cut=False,
+        trend_engine=TrendFollowingEngine(trailing_atr_multiplier=4.5, max_trailing_atr=4.5),
+        mean_revert_engine=MeanReversionEngine(max_holding_bars=24),
     )
 
     results = simulator.run(test_df)

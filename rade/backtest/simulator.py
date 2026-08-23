@@ -1,7 +1,9 @@
 """
-바이낸스 선물 RADE 백테스터 시뮬레이터 [현실적 수수료 모델링 반영]
+바이낸스 선물 RADE 백테스터 시뮬레이터 [프로덕션 통합 단일 표준 엔진]
 - 진입 및 1차/2차 지정가 익절: Maker 수수료 (0.02%)
-- 손절, 트레일링 스탑, 긴급 국면 전환 청산: Taker 수수료 (0.05%) + 슬리피지 (0.02%)
+- 손절, 트레일링 스탑, 타임스탑: Taker 수수료 (0.05%) + 슬리피지 (0.02%)
+- 8시간 주기 펀딩비 (0.01%)
+- 3-State HMM (RANGE, BULL_TREND, BEAR_PANIC) 완벽 지원
 """
 import numpy as np
 import pandas as pd
@@ -13,7 +15,7 @@ from rade.regime.regime_manager import RegimeState
 
 
 class BacktestSimulator:
-    """RADE 시스템 선물 백테스트 정밀 시뮬레이션 엔진"""
+    """RADE 시스템 선물 백테스트 프로덕션 단일 표준 시뮬레이션 엔진"""
 
     def __init__(
         self,
@@ -24,6 +26,8 @@ class BacktestSimulator:
         funding_fee_pct: float = 0.0001,    # 8시간당 0.01% 펀딩비
         risk_per_trade_pct: float = 0.02,   # 1회 2% 리스크
         leverage: float = 3.0,
+        bear_mode: str = "CASH",            # "CASH" (100% 관망) or "SHORT" (추세 숏)
+        use_regime_transition_cut: bool = False, # 국면 전환 시 손실 포지션 강제 컷 여부 (기본: False)
         trend_engine: Optional[TrendFollowingEngine] = None,
         mean_revert_engine: Optional[MeanReversionEngine] = None,
     ):
@@ -34,6 +38,8 @@ class BacktestSimulator:
         self.funding_fee_pct = funding_fee_pct
         self.risk_per_trade_pct = risk_per_trade_pct
         self.leverage = leverage
+        self.bear_mode = bear_mode
+        self.use_regime_transition_cut = use_regime_transition_cut
 
         self.pos_manager = PositionManager(
             risk_per_trade_pct=risk_per_trade_pct,
@@ -65,7 +71,14 @@ class BacktestSimulator:
             date_str = str(curr_row.get('datetime', i))[:10]
             self.pos_manager.update_day(date_str, equity)
 
-            curr_regime = curr_row.get('regime_state', RegimeState.RANGE)
+            # 국면 상태 문자열 유연 정규화 (BULL_TREND / BULL -> BULL, RANGE -> RANGE, BEAR_PANIC / BEAR -> BEAR)
+            raw_regime = curr_row.get('regime_state', curr_row.get('state_3hmm', curr_row.get('regime', 'RANGE')))
+            if "BULL" in str(raw_regime):
+                curr_regime = "BULL_TREND"
+            elif "BEAR" in str(raw_regime):
+                curr_regime = "BEAR_PANIC"
+            else:
+                curr_regime = "RANGE"
 
             # 1. 펀딩비 결제 (매 8시간 / 8봉마다)
             if current_pos and (i % 8 == 0):
@@ -73,8 +86,8 @@ class BacktestSimulator:
                 funding_cost = notional_val * self.funding_fee_pct
                 equity -= funding_cost
 
-            # 2. 국면 전환 시 기존 손실 포지션 시장가 청산
-            if prev_regime and curr_regime != prev_regime and current_pos:
+            # 2. 국면 전환 시 기존 손실 포지션 시장가 청산 (옵션 활성화 시)
+            if self.use_regime_transition_cut and prev_regime and curr_regime != prev_regime and current_pos:
                 is_losing = False
                 if current_pos.side == PositionSide.LONG and curr_row['close'] < current_pos.entry_price:
                     is_losing = True
@@ -84,8 +97,7 @@ class BacktestSimulator:
                 if is_losing:
                     exit_price = curr_row['close'] * (1.0 - self.slippage_pct if current_pos.side == PositionSide.LONG else 1.0 + self.slippage_pct)
                     pnl = (exit_price - current_pos.entry_price) * current_pos.size if current_pos.side == PositionSide.LONG else (current_pos.entry_price - exit_price) * current_pos.size
-                    # 진입(Taker) + 청산(Taker) 수수료
-                    fee = (current_pos.entry_price * current_pos.size + exit_price * current_pos.size) * self.taker_fee_pct
+                    fee = (current_pos.entry_price * current_pos.size * self.taker_fee_pct) + (exit_price * current_pos.size * self.taker_fee_pct)
                     net_pnl = pnl - fee
                     equity += net_pnl
 
@@ -161,18 +173,23 @@ class BacktestSimulator:
                 signal = None
 
                 # [국면 1: 평온 횡보] -> 평균회귀 엔진 가동
-                if curr_regime == RegimeState.RANGE:
+                if curr_regime == "RANGE":
                     signal = self.mean_revert_engine.check_entry_signal_fast(i, records)
 
                 # [국면 2: 상승 추세] -> 추세추종 롱 가동
-                elif curr_regime == RegimeState.BULL_TREND:
+                elif curr_regime == "BULL_TREND":
                     raw_sig = self.trend_engine.check_entry_signal_fast(i, records)
                     if raw_sig and raw_sig['side'] == PositionSide.LONG:
                         signal = raw_sig
 
-                # [국면 3: 위험/패닉 국면] -> 현금 100% 관망 (Cash Mode / No Trade)
-                elif curr_regime == RegimeState.BEAR_PANIC:
-                    signal = None
+                # [국면 3: 위험/패닉 국면] -> 설정에 따라 관망(CASH) 또는 추세 숏
+                elif curr_regime == "BEAR_PANIC":
+                    if self.bear_mode == "SHORT":
+                        raw_sig = self.trend_engine.check_entry_signal_fast(i, records)
+                        if raw_sig and raw_sig['side'] == PositionSide.SHORT:
+                            signal = raw_sig
+                    else:
+                        signal = None
 
                 if signal:
                     raw_entry_price = next_row['open']

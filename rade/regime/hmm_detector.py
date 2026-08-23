@@ -1,5 +1,5 @@
-import pickle
 import os
+import pickle
 import numpy as np
 import pandas as pd
 from typing import Tuple, Optional
@@ -7,7 +7,7 @@ from hmmlearn.hmm import GaussianHMM
 
 
 class HMMRegimeDetector:
-    """Gaussian HMM 기반 3-State(Range, Bull, Bear/Panic) 국면 확률 추정기"""
+    """Gaussian HMM 기반 3-State(Range, Bull, Bear/Panic) 국면 확률 추정기 (exp16 기준 표준)"""
 
     def __init__(self, n_components: int = 3, covariance_type: str = "full", min_covar: float = 1e-3, random_state: int = 42):
         self.n_components = n_components
@@ -61,9 +61,8 @@ class HMMRegimeDetector:
     def _prepare_features(self, df: pd.DataFrame) -> np.ndarray:
         """관측치 피처 행렬 생성: [return, atr_ratio, vol_change]"""
         features = df[["return", "atr_ratio", "vol_change"]].copy()
-        arr = features.values.astype(np.float64)
-        arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
-        return arr
+        features = features.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+        return features.values
 
     def fit(self, df: pd.DataFrame):
         """슬라이딩 윈도우 데이터로 HMM 학습 및 3개 상태 자동 정렬(State Alignment)"""
@@ -71,31 +70,13 @@ class HMMRegimeDetector:
         if len(X) < 10:
             return
 
-        m = GaussianHMM(
+        self.model = GaussianHMM(
             n_components=self.n_components,
             covariance_type=self.covariance_type,
-            min_covar=self.min_covar,
             n_iter=100,
             random_state=self.random_state,
         )
-        try:
-            m.fit(X)
-            # 공분산 행렬 대각 성분 지터 추가로 비양정치 문제 원천 차단
-            if hasattr(m, 'covars_'):
-                for k in range(self.n_components):
-                    m.covars_[k] += np.eye(X.shape[1]) * 1e-4
-            self.model = m
-        except Exception:
-            # full 실패 시 diag 공분산으로 안전 학습
-            m_diag = GaussianHMM(
-                n_components=self.n_components,
-                covariance_type="diag",
-                min_covar=self.min_covar,
-                n_iter=100,
-                random_state=self.random_state,
-            )
-            m_diag.fit(X)
-            self.model = m_diag
+        self.model.fit(X)
 
         mean_returns = self.model.means_[:, 0]
         mean_atrs = self.model.means_[:, 1]
@@ -116,28 +97,12 @@ class HMMRegimeDetector:
         self.range_idx = range_candidate
         self.bear_idx = bear_candidate
 
-    def predict_state_probabilities(self, df: pd.DataFrame) -> np.ndarray:
-        """각 시점의 (P(Range), P(Bull), P(Bear)) 확률 반환"""
-        if self.model is None:
-            n = len(df)
-            return np.tile([0.34, 0.33, 0.33], (n, 1))
-
-        X = self._prepare_features(df)
-        try:
-            posteriors = self.model.predict_proba(X)
-            p_range = posteriors[:, self.range_idx]
-            p_bull = posteriors[:, self.bull_idx]
-            p_bear = posteriors[:, self.bear_idx]
-            return np.column_stack([p_range, p_bull, p_bear])
-        except Exception:
-            n = len(df)
-            return np.tile([0.34, 0.33, 0.33], (n, 1))
-
     def get_latest_probabilities(self, df_window: pd.DataFrame) -> Tuple[float, float, float]:
         """가장 최근(마지막) 봉의 3-State 확률 반환"""
-        try:
-            probs = self.predict_state_probabilities(df_window)
-            last_p = probs[-1]
-            return float(last_p[0]), float(last_p[1]), float(last_p[2])
-        except Exception:
-            return 0.34, 0.33, 0.33
+        if self.model is None:
+            return 0.33, 0.33, 0.33
+
+        X = self._prepare_features(df_window)
+        posteriors = self.model.predict_proba(X)
+        last_p = posteriors[-1]
+        return float(last_p[self.range_idx]), float(last_p[self.bull_idx]), float(last_p[self.bear_idx])
