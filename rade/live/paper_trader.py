@@ -74,7 +74,7 @@ class PaperTrader:
         self.pos_manager = PositionManager(risk_per_trade_pct=risk_per_trade_pct, default_leverage=leverage)
         self.mr_engine = MeanReversionEngine(max_holding_bars=24)  # 최적 조합 C (24시간 타임스탑)
         self.tf_engine = TrendFollowingEngine(max_trailing_atr=4.5)  # 최적 조합 C (4.5x 동적 ATR 상한)
-        self.regime_manager = RegimeManager(hmm_window=720, retrain_interval=168, anchor_dayofweek=6, trans_threshold=0.45, cooldown_bars=0)
+        self.regime_manager = RegimeManager(hmm_window=720, retrain_interval=168, anchor_dayofweek=6, trans_threshold=0.74, cooldown_bars=0)
 
         self.state = self._load_state()
 
