@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 from typing import Dict, Any, Tuple, Optional
 from rade.regime.hmm_detector import HMMRegimeDetector
-from rade.regime.rule_indicators import RuleRegimeCalculator
 
 
 class RegimeState:
@@ -35,7 +34,7 @@ class RegimeManager:
         self.trans_threshold = trans_threshold
         self.cooldown_bars = cooldown_bars
 
-        self.hmm_detector = HMMRegimeDetector(n_components=3, min_covar=1e-3)
+        self.hmm_detector = HMMRegimeDetector(n_components=3, min_covar=1e-3, random_state=42)
         self.last_trained_idx = -999
 
     def fit_hmm(self, df_window: pd.DataFrame):
@@ -44,27 +43,22 @@ class RegimeManager:
 
     def calculate_regime_probabilities(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        [백테스트용] 캘린더 앵커(매주 일요일 00:00 UTC) 기준 HMM 재학습 + 매시간 최신 사후확률 추론
+        [백테스트용] 168봉(주간) 주기 HMM 재학습 + 매시간 최신 사후확률 추론
         """
         data = df.copy()
         n = len(data)
-        dts = pd.to_datetime(data["datetime"], utc=True)
 
         p_ranges = np.full(n, np.nan)
         p_bulls = np.full(n, np.nan)
         p_bears = np.full(n, np.nan)
-        regime_states = [RegimeState.RANGE] * n
+        regime_states = ["RANGE"] * n
         is_cooldown = [False] * n
 
-        curr_state = RegimeState.RANGE
-        bars_since_trans = 999
+        curr_state = "RANGE"
 
         for i in range(self.hmm_window, n):
-            curr_dt = dts.iloc[i]
-            is_anchor = (curr_dt.dayofweek == self.anchor_dayofweek and curr_dt.hour == 0)
-
-            # 1. 캘린더 앵커 시점(매주 일요일 00:00 UTC)에만 HMM 모델 재학습
-            if not self.hmm_detector.is_fitted or is_anchor:
+            # 1. 168봉(1주일) 주기 HMM 모델 재학습
+            if (i - self.last_trained_idx) >= self.retrain_interval or self.last_trained_idx < 0:
                 train_slice = data.iloc[i - self.hmm_window : i]
                 try:
                     self.fit_hmm(train_slice)
@@ -84,24 +78,21 @@ class RegimeManager:
             p_bears[i] = p_d
 
             # 3-State 히스테리시스 전이 로직
-            prev_state = curr_state
-            probs = {
-                RegimeState.RANGE: p_r,
-                RegimeState.BULL_TREND: p_u,
-                RegimeState.BEAR_PANIC: p_d,
-            }
+            probs = {"RANGE": p_r, "BULL": p_u, "BEAR": p_d}
             max_state = max(probs, key=probs.get)
 
             if probs[max_state] >= self.trans_threshold:
                 curr_state = max_state
 
-            if curr_state != prev_state:
-                bars_since_trans = 0
+            # 표준 국면 문자열로 매핑
+            if curr_state == "BULL":
+                regime_states[i] = RegimeState.BULL_TREND
+            elif curr_state == "BEAR":
+                regime_states[i] = RegimeState.BEAR_PANIC
             else:
-                bars_since_trans += 1
+                regime_states[i] = RegimeState.RANGE
 
-            regime_states[i] = curr_state
-            is_cooldown[i] = (bars_since_trans < self.cooldown_bars)
+            is_cooldown[i] = False
 
         data['p_range'] = p_ranges
         data['p_bull'] = p_bulls
@@ -144,7 +135,6 @@ class RegimeManager:
                 if model_path:
                     self.hmm_detector.save_model(model_path)
             except Exception as e:
-                # 피팅 실패 시 기존 로드된 모델 유지
                 if not self.hmm_detector.is_fitted and model_path and os.path.exists(model_path):
                     self.hmm_detector.load_model(model_path)
 
