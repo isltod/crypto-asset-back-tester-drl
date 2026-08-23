@@ -24,7 +24,9 @@ class BacktestSimulator:
         taker_fee_pct: float = 0.0005,      # 0.05% Taker 시장가 수수료 (진입, 손절, 트레일링용)
         slippage_pct: float = 0.0002,       # 0.02% 시장가 슬리피지
         funding_fee_pct: float = 0.0001,    # 8시간당 0.01% 펀딩비
-        risk_per_trade_pct: float = 0.02,   # 1회 2% 리스크
+        risk_per_trade_pct: Optional[float] = None, # 단일 고정 리스크 지정 시 사용 (None이면 trend/mr 차등 적용)
+        trend_risk_pct: float = 0.025,      # 추세장(BULL_TREND) 공식 표준 2.5% 리스크
+        mr_risk_pct: float = 0.040,         # 횡보장(RANGE) 공식 표준 4.0% 리스크
         leverage: float = 3.0,
         bear_mode: str = "CASH",            # "CASH" (100% 관망) or "SHORT" (추세 숏)
         use_regime_transition_cut: bool = False, # 국면 전환 시 손실 포지션 강제 컷 여부 (기본: False)
@@ -36,13 +38,23 @@ class BacktestSimulator:
         self.taker_fee_pct = taker_fee_pct
         self.slippage_pct = slippage_pct
         self.funding_fee_pct = funding_fee_pct
-        self.risk_per_trade_pct = risk_per_trade_pct
+        
+        # 단일 리스크가 명시되면 양쪽 모두 덮어씀, 아니면 공식 차등 리스크 적용
+        if risk_per_trade_pct is not None:
+            self.trend_risk_pct = risk_per_trade_pct
+            self.mr_risk_pct = risk_per_trade_pct
+            self.risk_per_trade_pct = risk_per_trade_pct
+        else:
+            self.trend_risk_pct = trend_risk_pct
+            self.mr_risk_pct = mr_risk_pct
+            self.risk_per_trade_pct = 0.025
+
         self.leverage = leverage
         self.bear_mode = bear_mode
         self.use_regime_transition_cut = use_regime_transition_cut
 
         self.pos_manager = PositionManager(
-            risk_per_trade_pct=risk_per_trade_pct,
+            risk_per_trade_pct=self.trend_risk_pct,
             default_leverage=leverage
         )
         self.mean_revert_engine = mean_revert_engine or MeanReversionEngine()
@@ -172,12 +184,14 @@ class BacktestSimulator:
             if current_pos is None and not self.pos_manager.check_kill_switch(equity):
                 signal = None
 
-                # [국면 1: 평온 횡보] -> 평균회귀 엔진 가동
+                # [국면 1: 평온 횡보] -> 평균회귀 엔진 가동 (4.0% 리스크)
                 if curr_regime == "RANGE":
+                    self.pos_manager.risk_per_trade_pct = self.mr_risk_pct
                     signal = self.mean_revert_engine.check_entry_signal_fast(i, records)
 
-                # [국면 2: 상승 추세] -> 추세추종 롱 가동
+                # [국면 2: 상승 추세] -> 추세추종 롱 가동 (2.5% 리스크)
                 elif curr_regime == "BULL_TREND":
+                    self.pos_manager.risk_per_trade_pct = self.trend_risk_pct
                     raw_sig = self.trend_engine.check_entry_signal_fast(i, records)
                     if raw_sig and raw_sig['side'] == PositionSide.LONG:
                         signal = raw_sig
@@ -185,6 +199,7 @@ class BacktestSimulator:
                 # [국면 3: 위험/패닉 국면] -> 설정에 따라 관망(CASH) 또는 추세 숏
                 elif curr_regime == "BEAR_PANIC":
                     if self.bear_mode == "SHORT":
+                        self.pos_manager.risk_per_trade_pct = self.trend_risk_pct
                         raw_sig = self.trend_engine.check_entry_signal_fast(i, records)
                         if raw_sig and raw_sig['side'] == PositionSide.SHORT:
                             signal = raw_sig
