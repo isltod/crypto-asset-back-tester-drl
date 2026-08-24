@@ -30,34 +30,80 @@ class StrategyConfig:
 
 
 STRATEGY_PRESETS: Dict[str, StrategyConfig] = {
-    # 1. 황금 최적화 공식 표준 베이스라인 (Golden Standard Baseline ⭐⭐⭐⭐⭐)
+    # 1. 황금 균형 공식 표준 베이스라인 (Golden Standard Baseline ⭐⭐⭐⭐⭐ - 칼마 비율 1위)
     "STANDARD_GOLDEN": StrategyConfig(
         preset_id="STANDARD_GOLDEN",
-        name="황금 최적화 표준 베이스 모드 (공식 기본값 ⭐)",
-        description="추세장 2.5% x 횡보장 4.0% 비대칭 리스크 배팅으로 MDD 14%대를 유지하며 4년 수익률 +356%를 달성하는 RADE 공식 표준 모델",
+        name="황금 균형 표준 베이스 모드 (공식 기본값 ⭐)",
+        description="추세장 2.0% x 횡보장 4.0% 비대칭 배팅으로 칼마 비율 1위(16.08)를 달성하며 MDD 16%대로 4년 +260%를 만들어내는 RADE 공식 표준 모델",
         hmm_window=720,
         retrain_interval=168,
         hmm_base_threshold=0.74,
         hmm_bear_threshold=0.74,
         bear_mode="CASH",              # 하락장 100% 현금 관망
-        trend_risk_pct=0.025,          # 추세 2.5%
+        trend_risk_pct=0.020,          # 추세 2.0%
         mr_risk_pct=0.040,             # 횡보 4.0%
         trailing_atr_multiplier=4.5,
         max_trailing_atr=4.5,
         mean_revert_max_holding=24,
         leverage=3.0,
-        expected_4yr_return="+356.74% (+$35,674)",
-        expected_mdd="14.95% (철벽 방어)",
-        expected_pf="1.91",
-        expected_win_rate="54.5%",
-        expected_calmar="23.86 (전구간 1위)"
+        expected_4yr_return="+260.11% (+$26,011)",
+        expected_mdd="16.17% (안정적 16%대)",
+        expected_pf="1.96",
+        expected_win_rate="53.95%",
+        expected_calmar="16.08 (전구간 1위)"
     ),
 
-    # 2. 초안전 지향 프로파일 (Ultra Safe Mode)
+    # 2. 안정 성장형 프로파일 (Moderate Safe Mode - MDD 13%대 철벽 방어)
+    "MODERATE_SAFE": StrategyConfig(
+        preset_id="MODERATE_SAFE",
+        name="안정 성장 모드 (MDD 13%대 철벽 방어)",
+        description="추세 1.5% x 횡보 4.0% 배팅으로 MDD를 13.95%로 묶어두면서 4년 +214% 및 2022년 1천불 흑자를 달성하는 안정 지향형 전략",
+        hmm_window=720,
+        retrain_interval=168,
+        hmm_base_threshold=0.74,
+        hmm_bear_threshold=0.74,
+        bear_mode="CASH",
+        trend_risk_pct=0.015,
+        mr_risk_pct=0.040,
+        trailing_atr_multiplier=4.5,
+        max_trailing_atr=4.5,
+        mean_revert_max_holding=24,
+        leverage=3.0,
+        expected_4yr_return="+214.09% (+$21,409)",
+        expected_mdd="13.95% (13%대 철벽 방어)",
+        expected_pf="1.95",
+        expected_win_rate="53.95%",
+        expected_calmar="15.34"
+    ),
+
+    # 3. 고수익 300% 성장 프로파일 (High Growth 300 Mode - MDD 19%대)
+    "HIGH_GROWTH_300": StrategyConfig(
+        preset_id="HIGH_GROWTH_300",
+        name="고수익 300% 성장 모드 (MDD 19%대 고수익형)",
+        description="추세 2.5% x 횡보 4.0% 배팅으로 4년 총수익 +303.45%(+$30,345)를 달성하는 300% 고수익 지향 전략",
+        hmm_window=720,
+        retrain_interval=168,
+        hmm_base_threshold=0.74,
+        hmm_bear_threshold=0.74,
+        bear_mode="CASH",
+        trend_risk_pct=0.025,
+        mr_risk_pct=0.040,
+        trailing_atr_multiplier=4.5,
+        max_trailing_atr=4.5,
+        mean_revert_max_holding=24,
+        leverage=3.0,
+        expected_4yr_return="+303.45% (+$30,345)",
+        expected_mdd="19.07% (20% 미만 방어)",
+        expected_pf="1.96",
+        expected_win_rate="53.95%",
+        expected_calmar="15.92"
+    ),
+
+    # 4. 초안전 지향 프로파일 (Ultra Safe Mode - MDD 10% 미만 극단적 통제)
     "ULTRA_SAFE": StrategyConfig(
         preset_id="ULTRA_SAFE",
         name="초안전 방어 모드 (MDD 10% 미만 극단적 통제)",
-        description="추세 1.5% x 횡보 1.5% 보수적 배팅으로 MDD를 9.40%로 묶어두면서 4년 +124%를 달성하는 초안전 지향 전략",
+        description="추세 1.5% x 횡보 1.5% 보수적 배팅으로 MDD를 9.70%로 묶어두면서 4년 +118%를 달성하는 초안전 지향 전략",
         hmm_window=720,
         retrain_interval=168,
         hmm_base_threshold=0.74,
@@ -69,18 +115,18 @@ STRATEGY_PRESETS: Dict[str, StrategyConfig] = {
         max_trailing_atr=4.5,
         mean_revert_max_holding=24,
         leverage=3.0,
-        expected_4yr_return="+124.56% (+$12,455)",
-        expected_mdd="9.40% (한 자리 수 극단적 방어)",
+        expected_4yr_return="+118.40% (+$11,840)",
+        expected_mdd="9.70% (한 자리 수 극단적 방어)",
         expected_pf="1.90",
         expected_win_rate="54.5%",
-        expected_calmar="13.26"
+        expected_calmar="12.20"
     ),
 
-    # 3. 수익 극대화 비대칭 숏 모드 (Aggressive Short Mode)
+    # 5. 수익 극대화 비대칭 숏 모드 (Aggressive Short Mode)
     "AGGRESSIVE_SHORT": StrategyConfig(
         preset_id="AGGRESSIVE_SHORT",
         name="수익 극대화 비대칭 숏 공격 모드",
-        description="하락 확신도 80% 이상의 대폭락장에서 추세 숏을 때려 2022년 하락장(+6,778$)을 최고 수익 연도로 반전시키는 230% 수익 극대화 전략",
+        description="하락 확신도 80% 이상의 대폭락장에서 추세 숏을 때려 2022년 하락장(+5,586$)을 최고 수익 연도로 반전시키는 213% 수익 극대화 전략",
         hmm_window=720,
         retrain_interval=168,
         hmm_base_threshold=0.74,
@@ -92,11 +138,11 @@ STRATEGY_PRESETS: Dict[str, StrategyConfig] = {
         max_trailing_atr=4.5,
         mean_revert_max_holding=24,
         leverage=3.0,
-        expected_4yr_return="+230.42% (+$23,042)",
+        expected_4yr_return="+213.28% (+$21,328)",
         expected_mdd="26.27% (변동성 감수)",
         expected_pf="1.41",
-        expected_win_rate="42.6%",
-        expected_calmar="8.77"
+        expected_win_rate="43.2%",
+        expected_calmar="8.12"
     )
 }
 
