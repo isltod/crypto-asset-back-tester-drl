@@ -56,11 +56,10 @@ def run_warmup_timeframe_test(interval: str, hmm_window: int, retrain_interval: 
     )
     df_proc = manager.calculate_regime_probabilities(df_ind)
 
-    # 2023년 1월 1일 이후 데이터만 정확히 분리하여 성과 측정 (2022년은 순수 웜업용)
-    eval_start_dt = pd.to_datetime("2023-01-01 00:00:00", utc=True)
-    test_df = df_proc[df_proc["datetime"] >= eval_start_dt].reset_index(drop=True)
+    # 전체 구간(2022~2024)으로 시뮬레이터를 연속 실행하여 지표 왜곡 방지
+    test_df = df_proc.iloc[hmm_window:].reset_index(drop=True)
 
-    print(f"백테스트 시뮬레이터 실행 중 (평가 구간: 2023.01.01 ~ 2024.06.01, 총 {len(test_df)}개 봉)...")
+    print(f"백테스트 시뮬레이터 연속 실행 중 (총 {len(test_df)}개 봉)...")
     sim = BacktestSimulator(
         initial_capital=10000.0,
         risk_per_trade_pct=0.02,
@@ -70,9 +69,58 @@ def run_warmup_timeframe_test(interval: str, hmm_window: int, retrain_interval: 
         slippage_pct=0.0002,
         funding_fee_pct=0.0001
     )
-    res = sim.run(test_df)
-    res['interval'] = interval
-    res['total_candles'] = len(test_df)
+    full_res = sim.run(test_df)
+    trades_df = full_res['trades_df']
+
+    # 2023년 1월 1일 이후 체결된 거래만 정확히 분리하여 1.5년 평가 성과 산출
+    if not trades_df.empty:
+        trades_df['dt'] = pd.to_datetime(trades_df['entry_time'])
+        eval_trades = trades_df[trades_df['dt'] >= '2023-01-01'].copy()
+        
+        wins = eval_trades[eval_trades['pnl'] > 0]
+        losses = eval_trades[eval_trades['pnl'] < 0]
+        total_pnl = eval_trades['pnl'].sum()
+        gp = wins['pnl'].sum()
+        gl = abs(losses['pnl'].sum())
+        pf = gp / gl if gl > 0 else (999.0 if gp > 0 else 0.0)
+        wr = len(wins) / len(eval_trades) * 100.0 if len(eval_trades) > 0 else 0.0
+        
+        # 평가 구간 자산 곡선 산출
+        eval_equity = 10000.0 + total_pnl
+        ret_pct = (total_pnl / 10000.0) * 100.0
+        
+        # MDD 계산
+        equity_curve = [10000.0]
+        curr_eq = 10000.0
+        for pnl in eval_trades['pnl']:
+            curr_eq += pnl
+            equity_curve.append(curr_eq)
+        peaks = np.maximum.accumulate(equity_curve)
+        dds = (peaks - equity_curve) / peaks * 100.0
+        mdd = np.max(dds) if len(dds) > 0 else 0.0
+
+        res = {
+            'interval': interval,
+            'total_return_pct': ret_pct,
+            'mdd_pct': mdd,
+            'total_trades': len(eval_trades),
+            'win_rate_pct': wr,
+            'profit_factor': pf,
+            'final_equity': eval_equity,
+            'total_candles': len(test_df[pd.to_datetime(test_df['datetime']) >= '2023-01-01']),
+        }
+    else:
+        res = {
+            'interval': interval,
+            'total_return_pct': 0.0,
+            'mdd_pct': 0.0,
+            'total_trades': 0,
+            'win_rate_pct': 0.0,
+            'profit_factor': 0.0,
+            'final_equity': 10000.0,
+            'total_candles': 0,
+        }
+
     return res
 
 
