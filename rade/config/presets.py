@@ -30,7 +30,7 @@ class StrategyConfig:
 
 
 STRATEGY_PRESETS: Dict[str, StrategyConfig] = {
-    # 1. 황금 최적화 공식 표준 베이스라인 (Golden Standard Baseline ⭐⭐⭐⭐⭐ - 칼마 비율 1위)
+    # 1. 황금 균형 공식 표준 베이스라인 (Golden Standard Baseline ⭐⭐⭐⭐⭐ - 칼마 비율 1위)
     "STANDARD_GOLDEN": StrategyConfig(
         preset_id="STANDARD_GOLDEN",
         name="황금 균형 표준 베이스 모드 (공식 기본값 ⭐)",
@@ -76,7 +76,30 @@ STRATEGY_PRESETS: Dict[str, StrategyConfig] = {
         expected_calmar="15.34"
     ),
 
-    # 3. 초안전 지향 프로파일 (Ultra Safe Mode - MDD 10% 미만 극단적 통제)
+    # 3. 고수익 300% 성장 프로파일 (High Growth 300 Mode - MDD 19%대)
+    "HIGH_GROWTH_300": StrategyConfig(
+        preset_id="HIGH_GROWTH_300",
+        name="고수익 300% 성장 모드 (MDD 19%대 고수익형)",
+        description="추세 2.5% x 횡보 4.0% 배팅으로 4년 총수익 +303.45%(+$30,345)를 달성하는 300% 고수익 지향 전략",
+        hmm_window=720,
+        retrain_interval=168,
+        hmm_base_threshold=0.74,
+        hmm_bear_threshold=0.74,
+        bear_mode="CASH",
+        trend_risk_pct=0.025,
+        mr_risk_pct=0.040,
+        trailing_atr_multiplier=4.5,
+        max_trailing_atr=4.5,
+        mean_revert_max_holding=24,
+        leverage=3.0,
+        expected_4yr_return="+303.45% (+$30,345)",
+        expected_mdd="19.07% (20% 미만 방어)",
+        expected_pf="1.96",
+        expected_win_rate="53.95%",
+        expected_calmar="15.92"
+    ),
+
+    # 4. 초안전 지향 프로파일 (Ultra Safe Mode - MDD 10% 미만 극단적 통제)
     "ULTRA_SAFE": StrategyConfig(
         preset_id="ULTRA_SAFE",
         name="초안전 방어 모드 (MDD 10% 미만 극단적 통제)",
@@ -99,7 +122,7 @@ STRATEGY_PRESETS: Dict[str, StrategyConfig] = {
         expected_calmar="12.20"
     ),
 
-    # 4. 수익 극대화 비대칭 숏 모드 (Aggressive Short Mode)
+    # 5. 수익 극대화 비대칭 숏 모드 (Aggressive Short Mode)
     "AGGRESSIVE_SHORT": StrategyConfig(
         preset_id="AGGRESSIVE_SHORT",
         name="수익 극대화 비대칭 숏 공격 모드",
