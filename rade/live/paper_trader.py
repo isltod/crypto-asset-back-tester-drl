@@ -352,7 +352,7 @@ class PaperTrader:
                 self.pos_manager.risk_per_trade_pct = 0.040  # 횡보장 공식 표준 4.0% 고승률 리스크
                 signal = self.mr_engine.check_entry_signal_fast(last_idx, records)
             elif curr_regime == RegimeState.BULL_TREND:
-                self.pos_manager.risk_per_trade_pct = 0.025  # 추세장 공식 표준 2.5% 리스크
+                self.pos_manager.risk_per_trade_pct = 0.020  # 추세장 공식 표준 2.0% 리스크 (칼마 1위 황금 균형)
                 raw_sig = self.tf_engine.check_entry_signal_fast(last_idx, records)
                 if raw_sig and raw_sig['side'] == PositionSide.LONG:
                     signal = raw_sig
