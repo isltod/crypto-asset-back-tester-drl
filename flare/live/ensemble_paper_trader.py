@@ -46,17 +46,19 @@ class EnsemblePaperTrader:
 
         self.notifier = TelegramNotifier()
 
-        # 하위 독립 서브 트레이더 초기화 (격리된 서브 디렉토리 사용)
+        # 하위 독립 서브 트레이더 초기화 (격리된 서브 디렉토리 사용 및 내부 시작 알림 억제)
         self.rade_trader = PaperTrader(
             symbol="BTCUSDT",
             initial_capital=self.initial_capital * self.rade_ratio,
             preset_name="STANDARD_GOLDEN",
-            instance_id=f"{self.instance_id}_rade"
+            instance_id=f"{self.instance_id}_rade",
+            suppress_start_notify=True
         )
         self.flare_trader = FlarePaperTrader(
             initial_capital=self.initial_capital * self.flare_ratio,
             leverage=5.0,
-            instance_id=f"{self.instance_id}_flare"
+            instance_id=f"{self.instance_id}_flare",
+            suppress_start_notify=True
         )
 
         self.state = self._load_state()
@@ -73,6 +75,7 @@ class EnsemblePaperTrader:
             "initial_capital": self.initial_capital,
             "total_equity": self.initial_capital,
             "last_rebalance_quarter": None,
+            "is_initialized": False,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -80,6 +83,24 @@ class EnsemblePaperTrader:
         self.state["updated_at"] = datetime.now(timezone.utc).isoformat()
         with open(self.state_file, "w", encoding="utf-8") as f:
             json.dump(self.state, f, indent=2, ensure_ascii=False)
+
+    def notify_start(self):
+        """앙상블 포트폴리오 최초 가동 시작 알림 발송"""
+        kst_now = datetime.now(timezone.utc).astimezone(timezone(pd.Timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S KST')
+        rade_init = self.initial_capital * self.rade_ratio
+        flare_init = self.initial_capital * self.flare_ratio
+        msg = (
+            f"🟢 *[🏰 8:2 앙상블 리밸런싱 포트폴리오 가동 시작]*\n"
+            f"• *시작 시각*: `{kst_now}`\n"
+            f"• *총 자본*: `${self.state['total_equity']:,.2f}`\n"
+            f"• *RADE 공식 표준 ({int(self.rade_ratio*100)}%)*: `${rade_init:,.2f}` (BTC HMM 안심 방패 🛡️)\n"
+            f"• *FLARE 5x 스윙 ({int(self.flare_ratio*100)}%)*: `${flare_init:,.2f}` (4대 코인 펀딩비 창 ⚡)\n"
+            f"• *리밸런싱 주기*: `분기별(3개월) 자동 이익 락인 & 8:2 재배분`\n"
+            f"• *스케줄러*: `매 정시(00:05) 앙상블 통합 사이클 가동`"
+        )
+        self.notifier.send_message(msg)
+        self.state["is_initialized"] = True
+        self._save_state()
 
     def _append_snapshot(self, snapshot: Dict[str, Any]):
         df_new = pd.DataFrame([snapshot])
@@ -146,7 +167,10 @@ class EnsemblePaperTrader:
             )
             self.notifier.send_message(msg)
 
-    def execute_cycle(self):
+    def execute_cycle(self, force_start_notify: bool = False):
+        if force_start_notify or not self.state.get("is_initialized", False):
+            self.notify_start()
+
         utc_now = datetime.now(timezone.utc)
         kst_dt = utc_now.astimezone(timezone(pd.Timedelta(hours=9)))
         curr_time_kst = kst_dt.strftime("%Y-%m-%d %H:%M:%S KST")
