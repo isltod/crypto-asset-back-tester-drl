@@ -57,12 +57,14 @@ class PaperTrader:
         taker_fee_pct: float = 0.0005,
         slippage_pct: float = 0.0002,
         funding_fee_pct: float = 0.0001,
+        suppress_start_notify: bool = False,
     ):
         self.symbol = symbol
         self.initial_capital = initial_capital
         self.preset_name = preset_name
         self.preset_config: StrategyConfig = get_preset(preset_name)
         self.instance_id = instance_id or preset_name.lower()
+        self.suppress_start_notify = suppress_start_notify
         
         # 인스턴스 전용 격리 데이터 디렉토리
         self.instance_dir = os.path.join(PROJECT_ROOT, "data", "live", self.instance_id)
@@ -131,14 +133,19 @@ class PaperTrader:
 
     def notify_start(self):
         """시스템 최초 가동 시작 알림 발송"""
+        if self.suppress_start_notify:
+            self.state["is_initialized"] = True
+            self._save_state()
+            return
+
         kst_now = datetime.now(timezone.utc).astimezone(timezone(pd.Timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S KST')
         msg = (
-            f"🟢 *[RADE 페이퍼 트레이딩 시스템 가동 시작]*\n"
+            f"🟢 *[🌟 {self.preset_config.name} 가동 시작]*\n"
             f"• *시작 시각*: `{kst_now}`\n"
             f"• *초기 자본*: `${self.state['equity']:,.2f}`\n"
             f"• *거래 대상*: `{self.symbol} (선물 1시간봉)`\n"
-            f"• *국면 모델*: `3-State Gaussian HMM (Cash Mode)`\n"
-            f"• *전략 엔진*: `추세추종 (동적 4.0x ATR) + 평균회귀`\n"
+            f"• *레버리지*: `{self.preset_config.leverage:.1f}x` | *하락장*: `{self.preset_config.bear_mode}`\n"
+            f"• *1회 리스크*: `추세 {self.preset_config.trend_risk_pct:.1%} / 횡보 {self.preset_config.mr_risk_pct:.1%}`\n"
             f"• *스케줄러*: `매 정시(00:05) 자동 분석 및 포지션 관리 가동`"
         )
         self.notifier.send_message(msg)

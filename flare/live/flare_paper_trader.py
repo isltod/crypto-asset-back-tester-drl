@@ -36,6 +36,7 @@ class FlarePaperTrader:
         fee_taker: float = 0.0005,
         fee_maker: float = 0.0002,
         slippage: float = 0.0002,
+        suppress_start_notify: bool = False,
     ):
         self.symbols = symbols or ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT"]
         self.initial_capital = initial_capital
@@ -45,6 +46,7 @@ class FlarePaperTrader:
         self.fee_taker = fee_taker
         self.fee_maker = fee_maker
         self.slippage = slippage
+        self.suppress_start_notify = suppress_start_notify
 
         self.instance_dir = os.path.join(PROJECT_ROOT, "data", "live", self.instance_id)
         os.makedirs(self.instance_dir, exist_ok=True)
@@ -70,6 +72,7 @@ class FlarePaperTrader:
             "equity": self.initial_capital,
             "active_positions": {},  # {symbol: position_dict}
             "last_trade_id": 0,
+            "is_initialized": False,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -77,6 +80,28 @@ class FlarePaperTrader:
         self.state["updated_at"] = datetime.now(timezone.utc).isoformat()
         with open(self.state_file, "w", encoding="utf-8") as f:
             json.dump(self.state, f, indent=2, ensure_ascii=False)
+
+    def notify_start(self):
+        """시스템 최초 가동 시작 알림 발송"""
+        if self.suppress_start_notify:
+            self.state["is_initialized"] = True
+            self._save_state()
+            return
+
+        kst_now = datetime.now(timezone.utc).astimezone(timezone(pd.Timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S KST')
+        sym_str = ", ".join([s.replace("USDT", "") for s in self.symbols])
+        msg = (
+            f"🟢 *[⚡ FLARE 멀티코인 5x 스윙 시스템 가동 시작]*\n"
+            f"• *시작 시각*: `{kst_now}`\n"
+            f"• *초기 자본*: `${self.state['equity']:,.2f}`\n"
+            f"• *거래 대상*: `{sym_str} (선물 4대 메이저)`\n"
+            f"• *전략 엔진*: `음수 펀딩비 숏스퀴즈 반등 사냥`\n"
+            f"• *레버리지*: `{self.leverage:.1f}x` | *슬롯 배분*: `1/N 동시 중복 진입`\n"
+            f"• *스케줄러*: `매 정시(00:05) 자동 펀딩비/손절/24h만기 감시 가동`"
+        )
+        self.notifier.send_message(msg)
+        self.state["is_initialized"] = True
+        self._save_state()
 
     def _append_trade_history(self, trade_record: Dict[str, Any]):
         df_new = pd.DataFrame([trade_record])
@@ -117,7 +142,10 @@ class FlarePaperTrader:
         data = res.json()
         return float(data.get("lastFundingRate", 0.0001))
 
-    def execute_cycle(self):
+    def execute_cycle(self, force_start_notify: bool = False):
+        if force_start_notify or not self.state.get("is_initialized", False):
+            self.notify_start()
+
         utc_now = datetime.now(timezone.utc)
         kst_dt = utc_now.astimezone(timezone(pd.Timedelta(hours=9)))
         curr_time_kst = kst_dt.strftime("%Y-%m-%d %H:%M:%S KST")
