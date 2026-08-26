@@ -143,11 +143,36 @@ STRATEGY_PRESETS: Dict[str, StrategyConfig] = {
         expected_pf="1.41",
         expected_win_rate="43.2%",
         expected_calmar="8.12"
+    ),
+
+    # 6. 몬스터 극한 100배 레버리지 모드 (Monster Extreme 100x Mode - 콘텐츠/스트레스 테스트 전용)
+    "MONSTER_EXTREME_100X": StrategyConfig(
+        preset_id="MONSTER_EXTREME_100X",
+        name="몬스터 극한 100x 모드 (콘텐츠/스트레스 전용 🚀)",
+        description="레버리지 100배 무제한 개방 + 추세 4% x 횡보 20% + 80% 숏으로 4년 +2,942.9%(30.4배)를 기록하지만 MDD 80.67%를 감수해야 하는 이론상 절대 한계 모델",
+        hmm_window=720,
+        retrain_interval=168,
+        hmm_base_threshold=0.74,
+        hmm_bear_threshold=0.80,       # 80% 비대칭 숏
+        bear_mode="SHORT",             # 추세 숏 가동
+        trend_risk_pct=0.040,          # 추세 4.0%
+        mr_risk_pct=0.200,             # 횡보 20.0% (초고위험)
+        trailing_atr_multiplier=4.5,
+        max_trailing_atr=4.5,
+        mean_revert_max_holding=24,
+        leverage=100.0,                # 100배 레버리지 개방
+        expected_4yr_return="+2,942.90% (+$294,290)",
+        expected_mdd="80.67% (초고위험 계좌 80% 손실)",
+        expected_pf="1.34",
+        expected_win_rate="44.8%",
+        expected_calmar="36.48"
     )
 }
 
-# 기본 별칭 지원 (CONSERVATIVE_CASH -> STANDARD_GOLDEN)
+# 기본 별칭 지원 (CONSERVATIVE_CASH -> STANDARD_GOLDEN, MONSTER -> MONSTER_EXTREME_100X)
 STRATEGY_PRESETS["CONSERVATIVE_CASH"] = STRATEGY_PRESETS["STANDARD_GOLDEN"]
+STRATEGY_PRESETS["MONSTER"] = STRATEGY_PRESETS["MONSTER_EXTREME_100X"]
+STRATEGY_PRESETS["MONSTER_100X"] = STRATEGY_PRESETS["MONSTER_EXTREME_100X"]
 
 
 def get_preset(preset_name: str = "STANDARD_GOLDEN") -> StrategyConfig:
@@ -162,3 +187,4 @@ def get_preset(preset_name: str = "STANDARD_GOLDEN") -> StrategyConfig:
 def list_presets() -> Dict[str, str]:
     """사용 가능한 프리셋 목록 및 설명 반환"""
     return {k: f"{v.name} ({v.expected_4yr_return}, MDD {v.expected_mdd})" for k, v in STRATEGY_PRESETS.items()}
+
