@@ -70,13 +70,25 @@ class HMMRegimeDetector:
         if len(X) < 10:
             return
 
-        self.model = GaussianHMM(
-            n_components=self.n_components,
-            covariance_type=self.covariance_type,
-            n_iter=100,
-            random_state=self.random_state,
-        )
-        self.model.fit(X)
+        try:
+            self.model = GaussianHMM(
+                n_components=self.n_components,
+                covariance_type=self.covariance_type,
+                min_covar=self.min_covar,
+                n_iter=100,
+                random_state=self.random_state,
+            )
+            self.model.fit(X)
+        except Exception:
+            # Fallback: 더 큰 min_covar 또는 diag 공분산으로 견고하게 재시도
+            self.model = GaussianHMM(
+                n_components=self.n_components,
+                covariance_type="diag",
+                min_covar=1e-2,
+                n_iter=100,
+                random_state=self.random_state,
+            )
+            self.model.fit(X)
 
         mean_returns = self.model.means_[:, 0]
         mean_atrs = self.model.means_[:, 1]
@@ -102,7 +114,10 @@ class HMMRegimeDetector:
         if self.model is None:
             return 0.33, 0.33, 0.33
 
-        X = self._prepare_features(df_window)
-        posteriors = self.model.predict_proba(X)
-        last_p = posteriors[-1]
-        return float(last_p[self.range_idx]), float(last_p[self.bull_idx]), float(last_p[self.bear_idx])
+        try:
+            X = self._prepare_features(df_window)
+            posteriors = self.model.predict_proba(X)
+            last_p = posteriors[-1]
+            return float(last_p[self.range_idx]), float(last_p[self.bull_idx]), float(last_p[self.bear_idx])
+        except Exception:
+            return 0.34, 0.33, 0.33

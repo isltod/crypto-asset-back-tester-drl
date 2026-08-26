@@ -43,13 +43,16 @@ logging.basicConfig(
 logger = logging.getLogger("PaperTrader")
 
 
+from rade.config.presets import get_preset, StrategyConfig
+
+
 class PaperTrader:
     def __init__(
         self,
         symbol: str = "BTCUSDT",
         initial_capital: float = 10000.0,
-        risk_per_trade_pct: float = 0.02,
-        leverage: float = 3.0,
+        preset_name: str = "STANDARD_GOLDEN",
+        instance_id: Optional[str] = None,
         maker_fee_pct: float = 0.0002,
         taker_fee_pct: float = 0.0005,
         slippage_pct: float = 0.0002,
@@ -57,24 +60,45 @@ class PaperTrader:
     ):
         self.symbol = symbol
         self.initial_capital = initial_capital
-        self.risk_per_trade_pct = risk_per_trade_pct
-        self.leverage = leverage
+        self.preset_name = preset_name
+        self.preset_config: StrategyConfig = get_preset(preset_name)
+        self.instance_id = instance_id or preset_name.lower()
+        
+        # 인스턴스 전용 격리 데이터 디렉토리
+        self.instance_dir = os.path.join(PROJECT_ROOT, "data", "live", self.instance_id)
+        os.makedirs(self.instance_dir, exist_ok=True)
+        
         self.maker_fee_pct = maker_fee_pct
         self.taker_fee_pct = taker_fee_pct
         self.slippage_pct = slippage_pct
         self.funding_fee_pct = funding_fee_pct
 
-        self.state_file = os.path.join(LIVE_DATA_DIR, "state.json")
-        self.trades_file = os.path.join(LIVE_DATA_DIR, "trades_history.csv")
-        self.snapshots_file = os.path.join(LIVE_DATA_DIR, "hourly_snapshots.csv")
-        self.model_file = os.path.join(LIVE_DATA_DIR, "hmm_model.pkl")
+        self.state_file = os.path.join(self.instance_dir, "state.json")
+        self.trades_file = os.path.join(self.instance_dir, "trades_history.csv")
+        self.snapshots_file = os.path.join(self.instance_dir, "hourly_snapshots.csv")
+        self.model_file = os.path.join(self.instance_dir, "hmm_model.pkl")
 
-        self.fetcher = BinanceFuturesFetcher(data_dir=LIVE_DATA_DIR)
+        self.fetcher = BinanceFuturesFetcher(data_dir=os.path.join(PROJECT_ROOT, "data", "live", "shared_cache"))
         self.notifier = TelegramNotifier()
-        self.pos_manager = PositionManager(risk_per_trade_pct=risk_per_trade_pct, default_leverage=leverage)
-        self.mr_engine = MeanReversionEngine(max_holding_bars=24)  # 최적 조합 C (24시간 타임스탑)
-        self.tf_engine = TrendFollowingEngine(max_trailing_atr=4.5)  # 최적 조합 C (4.5x 동적 ATR 상한)
-        self.regime_manager = RegimeManager(hmm_window=720, retrain_interval=168, anchor_dayofweek=6, trans_threshold=0.74, cooldown_bars=0)
+        
+        # 포지션 매니저에 프리셋 레버리지 및 리스크 주입
+        self.pos_manager = PositionManager(
+            risk_per_trade_pct=self.preset_config.trend_risk_pct,
+            default_leverage=self.preset_config.leverage,
+            max_leverage=self.preset_config.leverage
+        )
+        self.mr_engine = MeanReversionEngine(max_holding_bars=self.preset_config.mean_revert_max_holding)
+        self.tf_engine = TrendFollowingEngine(
+            trailing_atr_multiplier=self.preset_config.trailing_atr_multiplier,
+            max_trailing_atr=self.preset_config.max_trailing_atr
+        )
+        self.regime_manager = RegimeManager(
+            hmm_window=self.preset_config.hmm_window,
+            retrain_interval=self.preset_config.retrain_interval,
+            anchor_dayofweek=6,
+            trans_threshold=self.preset_config.hmm_base_threshold,
+            cooldown_bars=0
+        )
 
         self.state = self._load_state()
 
@@ -302,13 +326,13 @@ class PaperTrader:
                 self.state['equity'] += net_pnl
                 ret_pct = (net_pnl / self.state['equity']) * 100.0
 
-                self.state['last_trade_id'] += 1
                 trade_record = {
                     "trade_id": f"LIVE-{self.state['last_trade_id']:04d}",
+                    "preset": self.preset_name,
                     "engine": pos['engine'],
                     "regime_at_entry": pos.get('regime_at_entry', 'UNKNOWN'),
                     "side": pos['side'],
-                    "leverage": self.leverage,
+                    "leverage": self.preset_config.leverage,
                     "entry_time": pos['entry_time'],
                     "exit_time": curr_time_kst,
                     "entry_price": pos['entry_price'],
@@ -326,7 +350,7 @@ class PaperTrader:
                 self._append_trade_history(trade_record)
 
                 msg = (
-                    f"🎯 *[RADE 페이퍼 포지션 청산]*\n"
+                    f"🎯 *[{self.preset_config.name} 페이퍼 청산]*\n"
                     f"• *시각*: `{curr_time_kst}`\n"
                     f"• *사유*: `{action}`\n"
                     f"• *포지션*: `{pos['side']}` {closed_size:.4f} BTC ({pos['engine']})\n"
@@ -349,15 +373,21 @@ class PaperTrader:
             last_idx = len(records) - 1
 
             if curr_regime == RegimeState.RANGE:
-                self.pos_manager.risk_per_trade_pct = 0.040  # 횡보장 공식 표준 4.0% 고승률 리스크
+                self.pos_manager.risk_per_trade_pct = self.preset_config.mr_risk_pct  # 횡보장 프리셋 리스크
                 signal = self.mr_engine.check_entry_signal_fast(last_idx, records)
             elif curr_regime == RegimeState.BULL_TREND:
-                self.pos_manager.risk_per_trade_pct = 0.020  # 추세장 공식 표준 2.0% 리스크 (칼마 1위 황금 균형)
+                self.pos_manager.risk_per_trade_pct = self.preset_config.trend_risk_pct  # 추세장 프리셋 리스크
                 raw_sig = self.tf_engine.check_entry_signal_fast(last_idx, records)
                 if raw_sig and raw_sig['side'] == PositionSide.LONG:
                     signal = raw_sig
             elif curr_regime == RegimeState.BEAR_PANIC:
-                signal = None  # 현금 100% 관망
+                if self.preset_config.bear_mode == "SHORT" and p_bear >= self.preset_config.hmm_bear_threshold:
+                    self.pos_manager.risk_per_trade_pct = self.preset_config.trend_risk_pct  # 하락장 숏 리스크
+                    raw_sig = self.tf_engine.check_entry_signal_fast(last_idx, records)
+                    if raw_sig and raw_sig['side'] == PositionSide.SHORT:
+                        signal = raw_sig
+                else:
+                    signal = None  # 현금 100% 관망
 
             if signal:
                 side = signal['side']
@@ -393,19 +423,19 @@ class PaperTrader:
                     self.state['position'] = new_pos
 
                     msg = (
-                        f"🚀 *[RADE 페이퍼 신규 진입]*\n"
+                        f"🚀 *[{self.preset_config.name} 페이퍼 신규 진입]*\n"
                         f"• *시각*: `{curr_time_kst}`\n"
                         f"• *엔진*: `{signal['engine']}`\n"
                         f"• *국면*: `{curr_regime}` (Bull:{p_bull:.1%}, Bear:{p_bear:.1%})\n"
-                        f"• *포지션*: *{side_str}* {pos_size:.4f} BTC ({self.leverage}x)\n"
+                        f"• *포지션*: *{side_str}* {pos_size:.4f} BTC ({self.preset_config.leverage:.1f}x)\n"
                         f"• *진입가*: ${eff_entry_price:,.2f} | *손절가(SL)*: ${signal['sl_price']:,.2f}\n"
-                        f"• *계좌 자본*: ${self.state['equity']:,.2f}"
+                        f"• *투입 마진*: ${(pos_size * eff_entry_price / self.preset_config.leverage):,.2f} (1회 리스크: {self.pos_manager.risk_per_trade_pct:.1%})"
                     )
                     self.notifier.send_message(msg)
 
-        # 6. 매 시간별 계좌 스냅샷 기록
-        unrealized_pnl = 0.0
+        # 6. 매 시간별 계좌 상태 스냅샷 저장
         pos = self.state.get("position")
+        unrealized_pnl = 0.0
         if pos:
             if pos['side'] == "LONG":
                 unrealized_pnl = (close_p - pos['entry_price']) * pos['size']
@@ -413,10 +443,9 @@ class PaperTrader:
                 unrealized_pnl = (pos['entry_price'] - close_p) * pos['size']
 
         snapshot = {
-            "timestamp": curr_bar['timestamp'],
-            "datetime_kst": curr_time_kst,
-            "btc_close": close_p,
-            "regime_state": curr_regime,
+            "timestamp": curr_time_kst,
+            "btc_price": close_p,
+            "regime": curr_regime,
             "p_range": p_range,
             "p_bull": p_bull,
             "p_bear": p_bear,

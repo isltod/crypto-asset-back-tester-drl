@@ -145,7 +145,30 @@ STRATEGY_PRESETS: Dict[str, StrategyConfig] = {
         expected_calmar="8.12"
     ),
 
-    # 6. 몬스터 극한 100배 레버리지 모드 (Monster Extreme 100x Mode - 콘텐츠/스트레스 테스트 전용)
+    # 6. 작은 몬스터 실전 공격형 모드 (Monster Mini Mode - TF 4% x MR 12% x 80% 숏 💥)
+    "MONSTER_MINI": StrategyConfig(
+        preset_id="MONSTER_MINI",
+        name="작은 몬스터 실전 공격형 (수익률 22.8배 🚀)",
+        description="레버리지 100배 개방 + 추세 4% x 횡보 12% + 80% 숏으로 MDD 63.2%를 유지하면서 4년 +2,185.1%(22.85배)의 초고수익을 달성하는 실전 최강 공격 모델",
+        hmm_window=720,
+        retrain_interval=168,
+        hmm_base_threshold=0.74,
+        hmm_bear_threshold=0.80,       # 80% 비대칭 숏
+        bear_mode="SHORT",             # 추세 숏 가동
+        trend_risk_pct=0.040,          # 추세 4.0%
+        mr_risk_pct=0.120,             # 횡보 12.0%
+        trailing_atr_multiplier=4.5,
+        max_trailing_atr=4.5,
+        mean_revert_max_holding=24,
+        leverage=100.0,                # 100배 레버리지 개방
+        expected_4yr_return="+2,185.10% (+$218,510)",
+        expected_mdd="63.22% (공격형 변동성)",
+        expected_pf="1.45",
+        expected_win_rate="46.2%",
+        expected_calmar="34.56"
+    ),
+
+    # 7. 몬스터 극한 100배 레버리지 모드 (Monster Extreme 100x Mode - 콘텐츠/스트레스 테스트 전용)
     "MONSTER_EXTREME_100X": StrategyConfig(
         preset_id="MONSTER_EXTREME_100X",
         name="몬스터 극한 100x 모드 (콘텐츠/스트레스 전용 🚀)",
@@ -169,9 +192,9 @@ STRATEGY_PRESETS: Dict[str, StrategyConfig] = {
     )
 }
 
-# 기본 별칭 지원 (CONSERVATIVE_CASH -> STANDARD_GOLDEN, MONSTER -> MONSTER_EXTREME_100X)
+# 기본 별칭 지원
 STRATEGY_PRESETS["CONSERVATIVE_CASH"] = STRATEGY_PRESETS["STANDARD_GOLDEN"]
-STRATEGY_PRESETS["MONSTER"] = STRATEGY_PRESETS["MONSTER_EXTREME_100X"]
+STRATEGY_PRESETS["MONSTER"] = STRATEGY_PRESETS["MONSTER_MINI"]
 STRATEGY_PRESETS["MONSTER_100X"] = STRATEGY_PRESETS["MONSTER_EXTREME_100X"]
 
 
