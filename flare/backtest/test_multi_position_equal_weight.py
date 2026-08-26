@@ -157,7 +157,9 @@ def run_equal_weight_multi_position(
         "final_balance": final_balance,
         "return_pct": total_ret_pct,
         "mdd": mdd,
-        "trades_df": trades_df
+        "trades_df": trades_df,
+        "equity_curve": equity_curve,
+        "timestamps": list(master_timeline)
     }
 
 
