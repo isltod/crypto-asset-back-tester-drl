@@ -187,7 +187,7 @@ class PaperTrader:
         trade_cnt = self.state.get("last_trade_id", 0)
 
         msg = (
-            f"📊 *[{self.preset_config.name} 일일 정기 브리핑 (오후 3시)]*\n"
+            f"📊 *[{self.preset_config.name} 일일 정기 브리핑 (오후 4시)]*\n"
             f"• *기준 일시*: `{curr_time_kst}`\n"
             f"• *비트코인 종가*: `${close_p:,.2f}`\n"
             f"• *현재 국면*: `{curr_regime}` (Bull:{p_bull:.1%}, Bear:{p_bear:.1%})\n"
@@ -467,10 +467,11 @@ class PaperTrader:
             "unrealized_pnl": unrealized_pnl,
             "account_equity": self.state['equity'] + unrealized_pnl,
         }
-        # 7. 매일 오후 15:00 KST 일일 정기 브리핑 알림
-        if (now_kst.hour == 15 and self.state.get("last_daily_report_date") != today_kst_str) or force_daily_report:
+        # 7. 매일 오후 16:00 KST 일일 정기 브리핑 알림
+        if (now_kst.hour == 16 and self.state.get("last_daily_report_date") != today_kst_str) or force_daily_report:
             self._send_daily_report(curr_time_kst, close_p, curr_regime, p_bull, p_bear, unrealized_pnl)
-            self.state["last_daily_report_date"] = today_kst_str
+            if not force_daily_report:
+                self.state["last_daily_report_date"] = today_kst_str
 
         # 8. 상태 파일 저장
         self.state['current_regime'] = curr_regime
