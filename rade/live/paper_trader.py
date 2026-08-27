@@ -170,6 +170,9 @@ class PaperTrader:
 
     def _send_daily_report(self, curr_time_kst: str, close_p: float, curr_regime: str, p_bull: float, p_bear: float, unrealized_pnl: float):
         """매일 오전 9시 KST 정기 계좌 브리핑 발송"""
+        if self.suppress_start_notify:
+            return  # 앙상블 내부 서브 인스턴스는 단독 브리핑 억제
+
         pos = self.state.get("position")
         total_equity = self.state['equity'] + unrealized_pnl
         init_cap = self.state.get("initial_capital", self.initial_capital)
@@ -184,7 +187,7 @@ class PaperTrader:
         trade_cnt = self.state.get("last_trade_id", 0)
 
         msg = (
-            f"📊 *[RADE 일일 정기 브리핑 (오전 9시)]*\n"
+            f"📊 *[{self.preset_config.name} 일일 정기 브리핑 (오전 9시)]*\n"
             f"• *기준 일시*: `{curr_time_kst}`\n"
             f"• *비트코인 종가*: `${close_p:,.2f}`\n"
             f"• *현재 국면*: `{curr_regime}` (Bull:{p_bull:.1%}, Bear:{p_bear:.1%})\n"
@@ -194,7 +197,7 @@ class PaperTrader:
         )
         self.notifier.send_message(msg)
 
-    def execute_cycle(self, force_start_notify: bool = False):
+    def execute_cycle(self, force_start_notify: bool = False, force_daily_report: bool = False):
         """1시간 단위 단일 실행 사이클 (Fetch -> Regime -> Update Position -> Signal Check -> Save)"""
         logger.info(f"=== [RADE Paper Trading Cycle Start: {self.symbol}] ===")
 
@@ -223,9 +226,11 @@ class PaperTrader:
 
         curr_bar = records[-1]  # 방금 마감된 최신 캔들
         utc_dt = pd.to_datetime(curr_bar['timestamp'], unit='ms', utc=True)
-        kst_dt = utc_dt.tz_convert('Asia/Seoul')
-        curr_time_kst = kst_dt.strftime('%Y-%m-%d %H:%M:%S KST')
-        today_kst_str = kst_dt.strftime('%Y-%m-%d')
+        
+        # 실제 현재 실행 시각 (현실 시간 KST)
+        now_kst = datetime.now(timezone.utc).astimezone(timezone(pd.Timedelta(hours=9)))
+        curr_time_kst = now_kst.strftime('%Y-%m-%d %H:%M:%S KST')
+        today_kst_str = now_kst.strftime('%Y-%m-%d')
 
         close_p = curr_bar['close']
         curr_regime = regime_info['regime_state']
@@ -462,10 +467,8 @@ class PaperTrader:
             "unrealized_pnl": unrealized_pnl,
             "account_equity": self.state['equity'] + unrealized_pnl,
         }
-        self._append_hourly_snapshot(snapshot)
-
         # 7. 매일 오전 09:00 KST 일일 정기 브리핑 알림
-        if kst_dt.hour == 9 and self.state.get("last_daily_report_date") != today_kst_str:
+        if (now_kst.hour == 9 and self.state.get("last_daily_report_date") != today_kst_str) or force_daily_report:
             self._send_daily_report(curr_time_kst, close_p, curr_regime, p_bull, p_bear, unrealized_pnl)
             self.state["last_daily_report_date"] = today_kst_str
 
@@ -473,7 +476,7 @@ class PaperTrader:
         self.state['current_regime'] = curr_regime
         self._save_state()
 
-        logger.info(f"사이클 완료. 평가 자산: ${(self.state['equity'] + unrealized_pnl):,.2f}")
+        logger.info(f"[{self.preset_name}] 사이클 완료. 평가 자산: ${(self.state['equity'] + unrealized_pnl):,.2f}")
 
 
 if __name__ == "__main__":

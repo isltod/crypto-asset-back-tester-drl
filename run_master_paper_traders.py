@@ -25,7 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger("MasterRunner")
 
 
-def run_all():
+def run_all(force_daily_report: bool = False, force_start_notify: bool = False):
     utc_now = datetime.now(timezone.utc)
     kst_now = utc_now.astimezone(timezone(pd.Timedelta(hours=9))).strftime("%Y-%m-%d %H:%M:%S KST")
     print(f"\n{'='*70}")
@@ -41,7 +41,7 @@ def run_all():
             preset_name="STANDARD_GOLDEN",
             instance_id="standard"
         )
-        trader_std.execute_cycle()
+        trader_std.execute_cycle(force_start_notify=force_start_notify, force_daily_report=force_daily_report)
         print("  └─► ✅ RADE 표준 모델 사이클 완료")
     except Exception as e:
         logger.error(f"RADE 표준 실행 실패: {e}")
@@ -55,7 +55,7 @@ def run_all():
             preset_name="MONSTER_MINI",
             instance_id="monster_mini"
         )
-        trader_mini.execute_cycle()
+        trader_mini.execute_cycle(force_start_notify=force_start_notify, force_daily_report=force_daily_report)
         print("  └─► ✅ 작은 몬스터 모델 사이클 완료")
     except Exception as e:
         logger.error(f"작은 몬스터 실행 실패: {e}")
@@ -69,7 +69,7 @@ def run_all():
             flare_ratio=0.20,
             instance_id="ensemble_82"
         )
-        ensemble.execute_cycle()
+        ensemble.execute_cycle(force_start_notify=force_start_notify, force_daily_report=force_daily_report)
         print("  └─► ✅ 8:2 앙상블 포트폴리오 사이클 완료")
     except Exception as e:
         logger.error(f"8:2 앙상블 실행 실패: {e}")
@@ -80,4 +80,11 @@ def run_all():
 
 
 if __name__ == "__main__":
-    run_all()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Master Paper Traders Runner")
+    parser.add_argument("--daily-report", action="store_true", help="3대 모델 일일 정기 브리핑 즉시 강제 발송")
+    parser.add_argument("--notify-start", action="store_true", help="시스템 가동 시작 알림 즉시 강제 발송")
+    args = parser.parse_args()
+
+    run_all(force_daily_report=args.daily_report, force_start_notify=args.notify_start)
