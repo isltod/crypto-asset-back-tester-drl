@@ -167,20 +167,48 @@ class EnsemblePaperTrader:
             )
             self.notifier.send_message(msg)
 
-    def execute_cycle(self, force_start_notify: bool = False):
+    def _send_daily_report(self, curr_time_kst: str):
+        """매일 오전 9시 KST 8:2 앙상블 통합 정기 브리핑 발송"""
+        rade_equity = self.rade_trader.state["equity"]
+        flare_equity = self.flare_trader.state["equity"]
+        total_equity = rade_equity + flare_equity
+        init_cap = self.state.get("initial_capital", self.initial_capital)
+        total_ret_pct = ((total_equity - init_cap) / init_cap) * 100.0
+
+        pos_rade = self.rade_trader.state.get("position")
+        rade_pos_str = f"{pos_rade['side']} {pos_rade['size']:.4f} BTC" if pos_rade else "현금 대기"
+
+        flare_positions = self.flare_trader.state.get("active_positions", {})
+        if flare_positions:
+            flare_pos_str = ", ".join([f"{s}({p['bars_held']}h)" for s, p in flare_positions.items()])
+        else:
+            flare_pos_str = "현금 대기"
+
+        msg = (
+            f"📊 *[🏰 8:2 앙상블 일일 정기 브리핑 (오후 3시)]*\n"
+            f"• *기준 일시*: `{curr_time_kst}`\n"
+            f"• *총 평가 자본*: *${total_equity:,.2f} ({total_ret_pct:+.2f}%)*\n"
+            f"• *RADE 표준 (80%)*: ${rade_equity:,.2f} (비중: {rade_equity/total_equity*100:.1f}% | {rade_pos_str})\n"
+            f"• *FLARE 5x (20%)*: ${flare_equity:,.2f} (비중: {flare_equity/total_equity*100:.1f}% | {flare_pos_str})\n"
+            f"• *다음 리밸런싱*: 분기 변경 시 자동 집행 (8:2 재배분)"
+        )
+        self.notifier.send_message(msg)
+
+    def execute_cycle(self, force_start_notify: bool = False, force_daily_report: bool = False):
         if force_start_notify or not self.state.get("is_initialized", False):
             self.notify_start()
 
         utc_now = datetime.now(timezone.utc)
-        kst_dt = utc_now.astimezone(timezone(pd.Timedelta(hours=9)))
-        curr_time_kst = kst_dt.strftime("%Y-%m-%d %H:%M:%S KST")
+        now_kst = utc_now.astimezone(timezone(pd.Timedelta(hours=9)))
+        curr_time_kst = now_kst.strftime("%Y-%m-%d %H:%M:%S KST")
+        today_kst_str = now_kst.strftime("%Y-%m-%d")
 
         # 1. RADE 표준 및 FLARE 5x 하위 사이클 순차 실행
         self.rade_trader.execute_cycle()
         self.flare_trader.execute_cycle()
 
         # 2. 분기 리밸런싱 검사
-        self.check_and_execute_rebalance(kst_dt)
+        self.check_and_execute_rebalance(now_kst)
 
         # 3. 통합 평가액 산출 및 스냅샷 기록
         rade_equity = self.rade_trader.state["equity"]
@@ -198,6 +226,13 @@ class EnsemblePaperTrader:
             "flare_weight": (flare_equity / total_equity) * 100.0,
         }
         self._append_snapshot(snapshot)
+
+        # 4. 매일 오후 15:00 KST 일일 정기 브리핑
+        if (now_kst.hour == 15 and self.state.get("last_daily_report_date") != today_kst_str) or force_daily_report:
+            self._send_daily_report(curr_time_kst)
+            self.state["last_daily_report_date"] = today_kst_str
+            self._save_state()
+
         logger.info(f"[8:2 앙상블] 통합 사이클 완료. 총 자산: ${total_equity:,.2f} (RADE: ${rade_equity:,.2f} / FLARE: ${flare_equity:,.2f})")
 
 
