@@ -185,7 +185,7 @@ class EnsemblePaperTrader:
             flare_pos_str = "현금 대기"
 
         msg = (
-            f"📊 *[🏰 8:2 앙상블 일일 정기 브리핑 (오후 3시)]*\n"
+            f"📊 *[🏰 8:2 앙상블 일일 정기 브리핑 (오후 4시)]*\n"
             f"• *기준 일시*: `{curr_time_kst}`\n"
             f"• *총 평가 자본*: *${total_equity:,.2f} ({total_ret_pct:+.2f}%)*\n"
             f"• *RADE 표준 (80%)*: ${rade_equity:,.2f} (비중: {rade_equity/total_equity*100:.1f}% | {rade_pos_str})\n"
@@ -227,11 +227,12 @@ class EnsemblePaperTrader:
         }
         self._append_snapshot(snapshot)
 
-        # 4. 매일 오후 15:00 KST 일일 정기 브리핑
-        if (now_kst.hour == 15 and self.state.get("last_daily_report_date") != today_kst_str) or force_daily_report:
+        # 4. 매일 오후 16:00 KST 일일 정기 브리핑
+        if (now_kst.hour == 16 and self.state.get("last_daily_report_date") != today_kst_str) or force_daily_report:
             self._send_daily_report(curr_time_kst)
-            self.state["last_daily_report_date"] = today_kst_str
-            self._save_state()
+            if not force_daily_report:
+                self.state["last_daily_report_date"] = today_kst_str
+                self._save_state()
 
         logger.info(f"[8:2 앙상블] 통합 사이클 완료. 총 자산: ${total_equity:,.2f} (RADE: ${rade_equity:,.2f} / FLARE: ${flare_equity:,.2f})")
 
