@@ -160,7 +160,7 @@ class FlarePaperTrader:
             pos_info = "보유 포지션 없음 (100% 현금 대기)"
 
         msg = (
-            f"📊 *[⚡ FLARE 5x 일일 정기 브리핑 (오전 9시)]*\n"
+            f"📊 *[⚡ FLARE 5x 일일 정기 브리핑 (오후 3시)]*\n"
             f"• *기준 일시*: `{curr_time_kst}`\n"
             f"• *총 평가 자본*: *${total_equity:,.2f} ({total_ret_pct:+.2f}%)*\n"
             f"• *활성 포지션*: {pos_info}\n"
@@ -327,8 +327,8 @@ class FlarePaperTrader:
         }
         self._append_hourly_snapshot(snapshot)
 
-        # 4. 매일 오전 09:00 KST 일일 정기 브리핑
-        if (now_kst.hour == 9 and self.state.get("last_daily_report_date") != today_kst_str) or force_daily_report:
+        # 4. 매일 오후 15:00 KST 일일 정기 브리핑
+        if (now_kst.hour == 15 and self.state.get("last_daily_report_date") != today_kst_str) or force_daily_report:
             self._send_daily_report(curr_time_kst)
             self.state["last_daily_report_date"] = today_kst_str
             self._save_state()
