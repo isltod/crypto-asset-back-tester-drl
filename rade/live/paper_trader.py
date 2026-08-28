@@ -184,7 +184,13 @@ class PaperTrader:
             pos_info = "보유 포지션 없음 (현금 대기)"
 
         # 거래 통계
-        trade_cnt = self.state.get("last_trade_id", 0)
+        trade_cnt = len(pd.read_csv(self.trades_file)) if os.path.exists(self.trades_file) and os.path.getsize(self.trades_file) > 10 else 0
+
+        # 일일 무결성 감사 실행
+        from rade.live.auditor import LiveAuditor
+        auditor = LiveAuditor(PROJECT_ROOT)
+        audit_res = auditor.audit_instance(self.instance_id)
+        audit_icon = "✅ 정상" if audit_res.get("is_clean") else "⚠️ 이상 감지"
 
         msg = (
             f"📊 *[{self.preset_config.name} 일일 정기 브리핑 (오후 4시)]*\n"
@@ -193,7 +199,8 @@ class PaperTrader:
             f"• *현재 국면*: `{curr_regime}` (Bull:{p_bull:.1%}, Bear:{p_bear:.1%})\n"
             f"• *총 평가 자본*: *${total_equity:,.2f} ({total_ret_pct:+.2f}%)*\n"
             f"• *보유 포지션*: {pos_info}\n"
-            f"• *누적 완료 거래*: {trade_cnt}회"
+            f"• *누적 완료 거래*: {trade_cnt}회\n"
+            f"• *🛡️ 무결성 감사*: {audit_icon} ({audit_res.get('summary', '회계 검증 완료')})"
         )
         self.notifier.send_message(msg)
 
