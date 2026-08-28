@@ -184,13 +184,20 @@ class EnsemblePaperTrader:
         else:
             flare_pos_str = "현금 대기"
 
+        # 일일 무결성 감사 실행
+        from rade.live.auditor import LiveAuditor
+        auditor = LiveAuditor(PROJECT_ROOT)
+        audit_res = auditor.audit_instance(self.instance_id)
+        audit_icon = "✅ 정상" if audit_res.get("is_clean") else "⚠️ 이상 감지"
+
         msg = (
             f"📊 *[🏰 8:2 앙상블 일일 정기 브리핑 (오후 4시)]*\n"
             f"• *기준 일시*: `{curr_time_kst}`\n"
             f"• *총 평가 자본*: *${total_equity:,.2f} ({total_ret_pct:+.2f}%)*\n"
             f"• *RADE 표준 (80%)*: ${rade_equity:,.2f} (비중: {rade_equity/total_equity*100:.1f}% | {rade_pos_str})\n"
             f"• *FLARE 5x (20%)*: ${flare_equity:,.2f} (비중: {flare_equity/total_equity*100:.1f}% | {flare_pos_str})\n"
-            f"• *다음 리밸런싱*: 분기 변경 시 자동 집행 (8:2 재배분)"
+            f"• *다음 리밸런싱*: 분기 변경 시 자동 집행 (8:2 재배분)\n"
+            f"• *🛡️ 무결성 감사*: {audit_icon} ({audit_res.get('summary', '회계 검증 완료')})"
         )
         self.notifier.send_message(msg)
 

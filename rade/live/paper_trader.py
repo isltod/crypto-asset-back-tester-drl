@@ -184,7 +184,13 @@ class PaperTrader:
             pos_info = "보유 포지션 없음 (현금 대기)"
 
         # 거래 통계
-        trade_cnt = self.state.get("last_trade_id", 0)
+        trade_cnt = len(pd.read_csv(self.trades_file)) if os.path.exists(self.trades_file) and os.path.getsize(self.trades_file) > 10 else 0
+
+        # 일일 무결성 감사 실행
+        from rade.live.auditor import LiveAuditor
+        auditor = LiveAuditor(PROJECT_ROOT)
+        audit_res = auditor.audit_instance(self.instance_id)
+        audit_icon = "✅ 정상" if audit_res.get("is_clean") else "⚠️ 이상 감지"
 
         msg = (
             f"📊 *[{self.preset_config.name} 일일 정기 브리핑 (오후 4시)]*\n"
@@ -193,7 +199,8 @@ class PaperTrader:
             f"• *현재 국면*: `{curr_regime}` (Bull:{p_bull:.1%}, Bear:{p_bear:.1%})\n"
             f"• *총 평가 자본*: *${total_equity:,.2f} ({total_ret_pct:+.2f}%)*\n"
             f"• *보유 포지션*: {pos_info}\n"
-            f"• *누적 완료 거래*: {trade_cnt}회"
+            f"• *누적 완료 거래*: {trade_cnt}회\n"
+            f"• *🛡️ 무결성 감사*: {audit_icon} ({audit_res.get('summary', '회계 검증 완료')})"
         )
         self.notifier.send_message(msg)
 
@@ -219,12 +226,17 @@ class PaperTrader:
         df_raw.sort_values(by="timestamp", inplace=True)
         df_raw.reset_index(drop=True, inplace=True)
 
+        # 미마감 캔들(진행 중인 봉) 제외: 항상 방금 마감된 '확정 1시간봉'을 기준으로 지표 산출 및 손절/진입 평가
+        now_ms = datetime.now(timezone.utc).timestamp() * 1000.0
+        if len(df_raw) > 0 and (df_raw.iloc[-1]["timestamp"] + 3600 * 1000 > now_ms):
+            df_raw = df_raw.iloc[:-1].copy().reset_index(drop=True)
+
         # 2. 지표 및 3-State HMM 국면 산출 (주 1회 일요일 09:00 KST 재학습 + 매시간 최신 사후확률 실시간 추론)
         df_ind = add_all_indicators(df_raw)
         regime_info, retrained = self.regime_manager.update_live_regime(df_ind, model_path=self.model_file)
         records = df_ind.to_dict('records')
 
-        curr_bar = records[-1]  # 방금 마감된 최신 캔들
+        curr_bar = records[-1]  # 방금 마감된 확정 1시간봉
         utc_dt = pd.to_datetime(curr_bar['timestamp'], unit='ms', utc=True)
         
         # 실제 현재 실행 시각 (현실 시간 KST)
