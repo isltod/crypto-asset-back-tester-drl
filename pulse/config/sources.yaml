@@ -1,0 +1,33 @@
+# pulse/config/sources.yaml
+# PULSE 수집 대상 소스 목록
+
+# 1. 완성형 심층 기사 (ARTICLE) - 메이저 언론사 공식 RSS
+rss_feeds:
+  - name: "CoinDesk"
+    url: "https://www.coindesk.com/arc/outboundfeeds/rss/"
+
+  - name: "CoinTelegraph"
+    url: "https://cointelegraph.com/rss"
+
+  - name: "Decrypt"
+    url: "https://decrypt.co/feed"
+
+  - name: "TheBlock"
+    url: "https://www.theblock.co/rss.xml"
+
+# 2. 초고속 실시간 속보 (FLASH) - 검증된 메이저 텔레그램 공식 채널
+telegram_channels:
+  - name: "CoinTelegraph_TG"
+    handle: "cointelegraph"
+
+  - name: "WatcherGuru"
+    handle: "WatcherGuru"
+
+  - name: "WuBlockchain"
+    handle: "wublockchainenglish"
+
+  - name: "WhaleAlert"
+    handle: "whale_alert_io"
+
+market:
+  symbol: "BTCUSDT"
