@@ -38,6 +38,13 @@ class TelegramNotifier:
         try:
             resp = requests.post(url, json=payload, timeout=10)
             if resp.status_code != 200:
-                print(f"[Notifier Error] 텔레그램 발송 실패: {resp.text}")
+                # 마크다운 파싱 에러(400)인 경우 parse_mode 없이 일반 텍스트로 즉시 Fallback 재전송
+                fallback_payload = {
+                    "chat_id": self.chat_id,
+                    "text": text.replace("*", "").replace("`", ""),
+                }
+                fallback_resp = requests.post(url, json=fallback_payload, timeout=10)
+                if fallback_resp.status_code != 200:
+                    print(f"[Notifier Error] 텔레그램 발송 실패: {resp.text}")
         except Exception as e:
             print(f"[Notifier Exception] 텔레그램 통신 에러: {e}")
