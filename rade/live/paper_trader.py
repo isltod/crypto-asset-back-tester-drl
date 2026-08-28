@@ -337,6 +337,7 @@ class PaperTrader:
 
                 self.state['equity'] += net_pnl
                 ret_pct = (net_pnl / self.state['equity']) * 100.0
+                self.state['last_trade_id'] = self.state.get('last_trade_id', 0) + 1
 
                 trade_record = {
                     "trade_id": f"LIVE-{self.state['last_trade_id']:04d}",
