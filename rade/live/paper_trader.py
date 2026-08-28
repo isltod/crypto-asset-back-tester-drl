@@ -219,12 +219,17 @@ class PaperTrader:
         df_raw.sort_values(by="timestamp", inplace=True)
         df_raw.reset_index(drop=True, inplace=True)
 
+        # 미마감 캔들(진행 중인 봉) 제외: 항상 방금 마감된 '확정 1시간봉'을 기준으로 지표 산출 및 손절/진입 평가
+        now_ms = datetime.now(timezone.utc).timestamp() * 1000.0
+        if len(df_raw) > 0 and (df_raw.iloc[-1]["timestamp"] + 3600 * 1000 > now_ms):
+            df_raw = df_raw.iloc[:-1].copy().reset_index(drop=True)
+
         # 2. 지표 및 3-State HMM 국면 산출 (주 1회 일요일 09:00 KST 재학습 + 매시간 최신 사후확률 실시간 추론)
         df_ind = add_all_indicators(df_raw)
         regime_info, retrained = self.regime_manager.update_live_regime(df_ind, model_path=self.model_file)
         records = df_ind.to_dict('records')
 
-        curr_bar = records[-1]  # 방금 마감된 최신 캔들
+        curr_bar = records[-1]  # 방금 마감된 확정 1시간봉
         utc_dt = pd.to_datetime(curr_bar['timestamp'], unit='ms', utc=True)
         
         # 실제 현재 실행 시각 (현실 시간 KST)
