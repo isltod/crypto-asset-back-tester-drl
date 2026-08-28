@@ -366,9 +366,9 @@ class PaperTrader:
                     f"🎯 *[{self.preset_config.name} 페이퍼 청산]*\n"
                     f"• *시각*: `{curr_time_kst}`\n"
                     f"• *사유*: `{action}`\n"
-                    f"• *포지션*: `{pos['side']}` {closed_size:.4f} BTC ({pos['engine']})\n"
+                    f"• *포지션*: `{pos['side']}` {closed_size:.4f} BTC (`{pos['engine']}`)\n"
                     f"• *진입가*: ${pos['entry_price']:,.2f} ➔ *청산가*: ${eff_exit_p:,.2f}\n"
-                    f"• *순손익(Net)*: *${net_pnl:+,.2f} ({ret_pct:+.2f}%)*\n"
+                    f"• *순손익(Net)*: *${net_pnl:+,.2f}* ({ret_pct:+.2f}%)\n"
                     f"• *수수료/펀딩비*: -${(entry_fee + exit_fee + funding_fee):,.2f}\n"
                     f"• *현재 총자산*: *${self.state['equity']:,.2f}*"
                 )
