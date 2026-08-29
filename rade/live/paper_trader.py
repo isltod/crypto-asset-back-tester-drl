@@ -266,14 +266,20 @@ class PaperTrader:
         # 2-1. 국면 전환(Regime Shift) 감지 및 실시간 알림
         prev_regime = self.state.get("current_regime")
         if prev_regime is not None and prev_regime != curr_regime:
-            action_desc = {
-                RegimeState.BULL_TREND: "🚀 [상승 추세] 추세추종 롱 엔진 가동 (동적 4.0x ATR 트레일링)",
-                RegimeState.RANGE: "⚖️ [평온 횡보] 평균회귀 80:20 분할익절 엔진 가동",
-                RegimeState.BEAR_PANIC: "🛡️ [위험/패닉] 현금 100% 안전 관망 (Cash Mode / No Trade)",
-            }.get(curr_regime, "시장 관망")
+            if curr_regime == RegimeState.BULL_TREND:
+                action_desc = "🚀 [상승 추세] 추세추종 롱 엔진 가동 (동적 4.0x ATR 트레일링)"
+            elif curr_regime == RegimeState.RANGE:
+                action_desc = "⚖️ [평온 횡보] 평균회귀 80:20 분할익절 엔진 가동"
+            elif curr_regime == RegimeState.BEAR_PANIC:
+                if self.preset_config.bear_mode == "SHORT":
+                    action_desc = f"💥 [급락/패닉] 추세추종 {int(self.preset_config.hmm_bear_threshold*100)}% 비대칭 숏 엔진 가동 (5대 조건 충족 시 진입)"
+                else:
+                    action_desc = "🛡️ [위험/패닉] 현금 100% 안전 관망 (Cash Mode / No Trade)"
+            else:
+                action_desc = "시장 관망"
 
             msg = (
-                f"🔄 *[RADE 시장 국면 전환 감지]*\n"
+                f"🔄 *[{self.preset_config.name} 시장 국면 전환 감지]*\n"
                 f"• *시각*: `{curr_time_kst}`\n"
                 f"• *국면 변화*: `{prev_regime}` ➔ *`{curr_regime}`*\n"
                 f"• *확률 분포*: `Range: {p_range:.1%}` | `Bull: {p_bull:.1%}` | `Bear: {p_bear:.1%}`\n"
