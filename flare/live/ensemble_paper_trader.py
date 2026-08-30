@@ -20,6 +20,7 @@ sys.path.insert(0, PROJECT_ROOT)
 from rade.live.paper_trader import PaperTrader
 from flare.live.flare_paper_trader import FlarePaperTrader
 from rade.live.notifier import TelegramNotifier
+from flare.config.ensemble_presets import get_ensemble_preset, EnsembleConfig
 
 logger = logging.getLogger("EnsemblePaperTrader")
 
@@ -28,14 +29,16 @@ class EnsemblePaperTrader:
     def __init__(
         self,
         initial_capital: float = 10000.0,
-        rade_ratio: float = 0.80,
-        flare_ratio: float = 0.20,
-        instance_id: str = "ensemble_82",
+        preset_name: str = "ENSEMBLE_82_GOLDEN",
+        instance_id: Optional[str] = None,
     ):
         self.initial_capital = initial_capital
-        self.rade_ratio = rade_ratio
-        self.flare_ratio = flare_ratio
-        self.instance_id = instance_id
+        self.preset_config: EnsembleConfig = get_ensemble_preset(preset_name)
+        self.preset_name = self.preset_config.preset_id
+
+        self.rade_ratio = self.preset_config.rade_ratio
+        self.flare_ratio = self.preset_config.flare_ratio
+        self.instance_id = instance_id or f"ensemble_{int(self.rade_ratio*100)}_{int(self.flare_ratio*100)}"
 
         self.instance_dir = os.path.join(PROJECT_ROOT, "data", "live", self.instance_id)
         os.makedirs(self.instance_dir, exist_ok=True)
@@ -50,7 +53,7 @@ class EnsemblePaperTrader:
         self.rade_trader = PaperTrader(
             symbol="BTCUSDT",
             initial_capital=self.initial_capital * self.rade_ratio,
-            preset_name="STANDARD_GOLDEN",
+            preset_name=self.preset_config.rade_preset,
             instance_id=f"{self.instance_id}_rade",
             suppress_start_notify=True
         )
@@ -74,9 +77,10 @@ class EnsemblePaperTrader:
         return {
             "initial_capital": self.initial_capital,
             "total_equity": self.initial_capital,
-            "last_rebalance_quarter": None,
             "is_initialized": False,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "last_rebalance_quarter": None,
+            "last_daily_report_date": "",
+            "updated_at": datetime.now(timezone.utc).isoformat()
         }
 
     def _save_state(self):
@@ -89,13 +93,16 @@ class EnsemblePaperTrader:
         kst_now = datetime.now(timezone.utc).astimezone(timezone(pd.Timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S KST')
         rade_init = self.initial_capital * self.rade_ratio
         flare_init = self.initial_capital * self.flare_ratio
+        r_pct = int(self.rade_ratio * 100)
+        f_pct = int(self.flare_ratio * 100)
+
         msg = (
-            f"🟢 *[🏰 8:2 앙상블 리밸런싱 포트폴리오 가동 시작]*\n"
+            f"🟢 *[🏰 {self.preset_config.name} 가동 시작]*\n"
             f"• *시작 시각*: `{kst_now}`\n"
             f"• *총 자본*: `${self.state['total_equity']:,.2f}`\n"
-            f"• *RADE 공식 표준 ({int(self.rade_ratio*100)}%)*: `${rade_init:,.2f}` (BTC HMM 안심 방패 🛡️)\n"
-            f"• *FLARE 5x 스윙 ({int(self.flare_ratio*100)}%)*: `${flare_init:,.2f}` (4대 코인 펀딩비 창 ⚡)\n"
-            f"• *리밸런싱 주기*: `분기별(3개월) 자동 이익 락인 & 8:2 재배분`\n"
+            f"• *RADE 표준 ({r_pct}%)*: `${rade_init:,.2f}` (BTC HMM 안심 방패 🛡️)\n"
+            f"• *FLARE 5x ({f_pct}%)*: `${flare_init:,.2f}` (4대 코인 펀딩비 창 ⚡)\n"
+            f"• *리밸런싱 주기*: `분기별(3개월) 자동 이익 락인 & {r_pct}:{f_pct} 재배분`\n"
             f"• *스케줄러*: `매 정시(00:05) 앙상블 통합 사이클 가동`"
         )
         self.notifier.send_message(msg)
@@ -134,6 +141,8 @@ class EnsemblePaperTrader:
 
             target_rade = total_equity * self.rade_ratio
             target_flare = total_equity * self.flare_ratio
+            r_pct = int(self.rade_ratio * 100)
+            f_pct = int(self.flare_ratio * 100)
 
             # 자산 재배분
             self.rade_trader.state["equity"] = target_rade
@@ -158,22 +167,24 @@ class EnsemblePaperTrader:
             self._append_rebalance_log(log)
 
             msg = (
-                f"⚖️ *[🏰 8:2 앙상블 분기 리밸런싱 집행]*\n"
+                f"⚖️ *[🏰 {self.preset_config.name} 분기 리밸런싱 집행]*\n"
                 f"• *분기*: `{quarter_str}`\n"
                 f"• *총 평가 자산*: *${total_equity:,.2f}*\n"
-                f"• *RADE (80%)*: ${rade_equity:,.2f} ──► *${target_rade:,.2f}*\n"
-                f"• *FLARE (20%)*: ${flare_equity:,.2f} ──► *${target_flare:,.2f}*\n"
-                f"• *효과*: 초과 수익 확정 락인 및 8:2 황금비율 재조정 완료! ✨"
+                f"• *RADE ({r_pct}%)*: ${rade_equity:,.2f} ──► *${target_rade:,.2f}*\n"
+                f"• *FLARE ({f_pct}%)*: ${flare_equity:,.2f} ──► *${target_flare:,.2f}*\n"
+                f"• *효과*: 초과 수익 확정 락인 및 {r_pct}:{f_pct} 황금비율 재조정 완료! ✨"
             )
             self.notifier.send_message(msg)
 
     def _send_daily_report(self, curr_time_kst: str):
-        """매일 오전 9시 KST 8:2 앙상블 통합 정기 브리핑 발송"""
+        """매일 오후 4시 KST 앙상블 통합 정기 브리핑 발송"""
         rade_equity = self.rade_trader.state["equity"]
         flare_equity = self.flare_trader.state["equity"]
         total_equity = rade_equity + flare_equity
         init_cap = self.state.get("initial_capital", self.initial_capital)
         total_ret_pct = ((total_equity - init_cap) / init_cap) * 100.0
+        r_pct = int(self.rade_ratio * 100)
+        f_pct = int(self.flare_ratio * 100)
 
         pos_rade = self.rade_trader.state.get("position")
         rade_pos_str = f"{pos_rade['side']} {pos_rade['size']:.4f} BTC" if pos_rade else "현금 대기"
@@ -191,12 +202,12 @@ class EnsemblePaperTrader:
         audit_icon = "✅ 정상" if audit_res.get("is_clean") else "⚠️ 이상 감지"
 
         msg = (
-            f"📊 *[🏰 8:2 앙상블 일일 정기 브리핑 (오후 4시)]*\n"
+            f"📊 *[{self.preset_config.name} 일일 정기 브리핑 (오후 4시)]*\n"
             f"• *기준 일시*: `{curr_time_kst}`\n"
             f"• *총 평가 자본*: *${total_equity:,.2f} ({total_ret_pct:+.2f}%)*\n"
-            f"• *RADE 표준 (80%)*: ${rade_equity:,.2f} (비중: {rade_equity/total_equity*100:.1f}% | {rade_pos_str})\n"
-            f"• *FLARE 5x (20%)*: ${flare_equity:,.2f} (비중: {flare_equity/total_equity*100:.1f}% | {flare_pos_str})\n"
-            f"• *다음 리밸런싱*: 분기 변경 시 자동 집행 (8:2 재배분)\n"
+            f"• *RADE 표준 ({r_pct}%)*: ${rade_equity:,.2f} (비중: {rade_equity/total_equity*100:.1f}% | {rade_pos_str})\n"
+            f"• *FLARE 5x ({f_pct}%)*: ${flare_equity:,.2f} (비중: {flare_equity/total_equity*100:.1f}% | {flare_pos_str})\n"
+            f"• *다음 리밸런싱*: 분기 변경 시 자동 집행 ({r_pct}:{f_pct} 재배분)\n"
             f"• *🛡️ 무결성 감사*: {audit_icon} ({audit_res.get('summary', '회계 검증 완료')})"
         )
         self.notifier.send_message(msg)
@@ -241,9 +252,9 @@ class EnsemblePaperTrader:
                 self.state["last_daily_report_date"] = today_kst_str
                 self._save_state()
 
-        logger.info(f"[8:2 앙상블] 통합 사이클 완료. 총 자산: ${total_equity:,.2f} (RADE: ${rade_equity:,.2f} / FLARE: ${flare_equity:,.2f})")
+        logger.info(f"[{self.preset_config.name}] 통합 사이클 완료. 총 자산: ${total_equity:,.2f} (RADE: ${rade_equity:,.2f} / FLARE: ${flare_equity:,.2f})")
 
 
 if __name__ == "__main__":
-    ensemble = EnsemblePaperTrader(instance_id="ensemble_82")
+    ensemble = EnsemblePaperTrader(preset_name="ENSEMBLE_82_GOLDEN", instance_id="ensemble_82")
     ensemble.execute_cycle()

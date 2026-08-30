@@ -65,8 +65,7 @@ def run_all(force_daily_report: bool = False, force_start_notify: bool = False):
         print("\n[3/3] 🏰 8:2 앙상블 포트폴리오 (RADE 80% + FLARE 20%) 실행 중...")
         ensemble = EnsemblePaperTrader(
             initial_capital=10000.0,
-            rade_ratio=0.80,
-            flare_ratio=0.20,
+            preset_name="ENSEMBLE_82_GOLDEN",
             instance_id="ensemble_82"
         )
         ensemble.execute_cycle(force_start_notify=force_start_notify, force_daily_report=force_daily_report)
