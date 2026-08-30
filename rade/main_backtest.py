@@ -7,6 +7,8 @@ RADE 전체 백테스트 실행 및 성과 분석 메인 스크립트
 import os
 import sys
 
+sys.stdout.reconfigure(encoding='utf-8')
+
 # 프로젝트 루트 디렉토리를 sys.path에 추가
 sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
@@ -63,12 +65,12 @@ def run_full_backtest():
     test_df = df_processed.iloc[720:].reset_index(drop=True)
     print(f"백테스트 구간: 총 {len(test_df)}개 캔들 ({test_df['datetime'].iloc[0]} ~ {test_df['datetime'].iloc[-1]})")
 
-    # 3. 백테스트 시뮬레이터 실행 (최적 조합 C: 동적 ATR 4.5x, 타임스탑 24h)
+    # 3. 백테스트 시뮬레이터 실행 (STANDARD_GOLDEN_v3: TF 1.0% x MR 8.0%, 3.0x, CASH)
     print("\n선물 백테스트 시뮬레이션 가동...")
     simulator = BacktestSimulator(
         initial_capital=10000.0,      # 시작 자금 $10,000
-        trend_risk_pct=0.020,         # 공식 표준 추세장 2.0% 리스크 (칼마 비율 1위 황금 균형)
-        mr_risk_pct=0.040,            # 공식 표준 횡보장 4.0% 리스크
+        trend_risk_pct=0.010,         # 공식 표준 추세장 1.0% 리스크 (STANDARD_GOLDEN_v3)
+        mr_risk_pct=0.080,            # 공식 표준 횡보장 8.0% 리스크 (Calmar 1위 13.19)
         leverage=3.0,                 # 레버리지 3x
         bear_mode="CASH",
         use_regime_transition_cut=False,

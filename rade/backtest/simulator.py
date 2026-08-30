@@ -25,8 +25,8 @@ class BacktestSimulator:
         slippage_pct: float = 0.0002,       # 0.02% 시장가 슬리피지
         funding_fee_pct: float = 0.0001,    # 8시간당 0.01% 펀딩비
         risk_per_trade_pct: Optional[float] = None, # 단일 고정 리스크 지정 시 사용 (None이면 trend/mr 차등 적용)
-        trend_risk_pct: float = 0.020,      # 추세장(BULL_TREND) 공식 표준 2.0% 리스크 (칼마 비율 1위 황금 균형)
-        mr_risk_pct: float = 0.040,         # 횡보장(RANGE) 공식 표준 4.0% 리스크
+        trend_risk_pct: float = 0.010,      # 추세장(BULL_TREND) 공식 표준 1.0% 리스크 (STANDARD_GOLDEN_v3)
+        mr_risk_pct: float = 0.080,         # 횡보장(RANGE) 공식 표준 8.0% 리스크 (Calmar 1위 13.19)
         leverage: float = 3.0,
         bear_mode: str = "CASH",            # "CASH" (100% 관망) or "SHORT" (추세 숏)
         use_regime_transition_cut: bool = False, # 국면 전환 시 손실 포지션 강제 컷 여부 (기본: False)
@@ -47,7 +47,7 @@ class BacktestSimulator:
         else:
             self.trend_risk_pct = trend_risk_pct
             self.mr_risk_pct = mr_risk_pct
-            self.risk_per_trade_pct = 0.020
+            self.risk_per_trade_pct = 0.010
 
         self.leverage = leverage
         self.bear_mode = bear_mode
